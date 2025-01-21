@@ -1,0 +1,208 @@
+esphome:
+  name: pulsante-sede
+  friendly_name: Pulsante Sede
+  on_boot: 
+    then:
+      - light.turn_on:
+          id: rgb_light
+          effect: "Arcobaleno"
+
+esp32:
+  board: esp32-s3-devkitc-1
+  framework:
+    type: arduino
+
+logger:
+  level: DEBUG
+
+http_request:
+  verify_ssl: false
+  useragent: sede_status
+  timeout: 30s
+
+globals:
+  - id: sede_state
+    type: bool
+    restore_value: true
+    initial_value: 'false'
+
+api:
+  encryption:
+    key: !secret sede_encryption_key
+
+ota:
+  - platform: esphome
+    password: !secret sede_ota_password
+
+wifi:
+  ssid: !secret sede_wifi_ssid
+  password: !secret sede_wifi_password
+
+  ap:
+    ssid: "Pulsante-Sede"
+    password: "sqCFoQleWAdw"
+
+  on_connect:
+    then:
+      - delay: 5s
+      - http_request.get:
+          url: "http://192.168.10.218:8080/status"
+          headers:
+            X-API-KEY: !secret api_key
+          capture_response: true
+          on_response:
+            then:
+              - if:
+                  condition:
+                    lambda: return response->status_code == 200;
+                  then:
+                    - if:
+                        condition:
+                          lambda: return body == "true";
+                        then:
+                          - light.turn_on:
+                              id: rgb_light
+                              red: 0%
+                              green: 100%
+                              blue: 0%
+                              effect: none
+                        else:
+                          - light.turn_on:
+                              id: rgb_light
+                              red: 100%
+                              green: 0%
+                              blue: 0%
+                              effect: none
+                  else:
+                    - light.turn_on:
+                        id: rgb_light
+                        effect: "Errore"
+          on_error:
+            then:
+              - light.turn_on:
+                  id: rgb_light
+                  effect: "Errore"
+
+captive_portal:
+
+output:
+  - platform: ledc
+    pin: 1
+    id: red_output
+    inverted: true
+  - platform: ledc
+    pin: 2
+    id: green_output
+    inverted: true
+  - platform: ledc
+    pin: 3
+    id: blue_output
+    inverted: true
+
+light:
+  - platform: rgb
+    name: "Stato Sede"
+    id: rgb_light
+    red: red_output
+    green: green_output
+    blue: blue_output
+    effects:
+      - pulse:
+          name: "Elaborazione"
+          transition_length: 0.5s
+          update_interval: 0.5s
+      - strobe:
+          name: "Errore"
+          colors:
+            - state: true
+              red: 100%
+              green: 0%
+              blue: 0%
+              duration: 500ms
+            - state: false
+              red: 0%
+              green: 0%
+              blue: 0%
+              duration: 500ms
+      - lambda:
+          name: "Arcobaleno"
+          lambda: |-
+            static float hue = 0.0;
+            auto now = millis();
+            if (now % 10 == 0) {
+              hue = hue + 0.1;
+              if (hue > 1.0)
+                hue = 0.0;
+              float red, green, blue;
+              float h = hue;
+              int i = int(h * 6);
+              float f = h * 6 - i;
+              float p = 1.0 * (1 - 1.0);
+              float q = 1.0 * (1 - f * 1.0);
+              float t = 1.0 * (1 - (1 - f) * 1.0);
+
+              switch (i % 6) {
+                case 0: red = 1.0, green = t, blue = p; break;
+                case 1: red = q, green = 1.0, blue = p; break;
+                case 2: red = p, green = 1.0, blue = t; break;
+                case 3: red = p, green = q, blue = 1.0; break;
+                case 4: red = t, green = p, blue = 1.0; break;
+                case 5: red = 1.0, green = p, blue = q; break;
+              }
+              auto call = id(rgb_light).turn_on();
+              call.set_rgb(red, green, blue);
+              call.perform();
+            }
+
+binary_sensor:
+  - platform: gpio
+    pin:
+      number: 4
+      mode: INPUT_PULLUP
+      inverted: true
+    name: "Pulsante Sede"
+    on_press:
+      then:
+        - light.turn_on:
+            id: rgb_light
+            effect: "Elaborazione"
+            red: 0%
+            green: 0%
+            blue: 100%
+        - http_request.post:
+            url: "http://192.168.10.218:8080/toggle"
+            headers:
+              X-API-KEY: !secret api_key
+            capture_response: true
+            on_response:
+              then:
+                - if:
+                    condition:
+                      lambda: return response->status_code == 200;
+                    then:
+                      - if:
+                          condition:
+                            lambda: return body == "true";
+                          then:
+                            - light.turn_on:
+                                id: rgb_light
+                                red: 0%
+                                green: 100%
+                                blue: 0%
+                                effect: none
+                          else:
+                            - light.turn_on:
+                                id: rgb_light
+                                red: 100%
+                                green: 0%
+                                blue: 0%
+                                effect: none
+                    else:
+                      - light.turn_on:
+                          id: rgb_light
+                          effect: "Errore"
+            on_error:
+              then:
+                - light.turn_on:
+                    id: rgb_light
+                    effect: "Errore"

@@ -1,0 +1,15 @@
+version: '3'
+services:
+  esphome:
+    container_name: esphome
+    image: ghcr.io/esphome/esphome
+    volumes:
+      - ./config:/config
+      - /etc/localtime:/etc/localtime:ro
+    restart: always
+    privileged: true
+    ports:
+      - 6052:6052
+    environment:
+      - USERNAME=test
+      - PASSWORD=ChangeMe

@@ -5,6 +5,8 @@ services:
     image: ghcr.io/metro-olografix/sede:dev
     restart: unless-stopped
     pull_policy: always
+    volumes:
+      - ./database:/app/database
     networks:
       - "internal-apps"
     env_file: backend.env

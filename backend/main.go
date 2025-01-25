@@ -121,7 +121,7 @@ func NewApp(config Config) (*App, error) {
 	}
 
 	// Initialize database with secure configuration
-	db, err := gorm.Open(sqlite.Open("sede.db"), &gorm.Config{
+	db, err := gorm.Open(sqlite.Open("database/sede.db"), &gorm.Config{
 		Logger:      gormLogger,
 		QueryFields: true, // Prevent SQL injection by explicitly stating fields
 	})

@@ -1,1 +1,5 @@
 backend/sede.db
+.env
+**/*.env.unenc
+# age encryption key
+backend/deploy/*-key.txt

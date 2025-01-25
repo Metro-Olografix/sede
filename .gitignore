@@ -1,4 +1,4 @@
-backend/sede.db
+backend/database/
 .env
 **/*.env.unenc
 # age encryption key

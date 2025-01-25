@@ -173,13 +173,14 @@ func (app *App) setupRouter() *gin.Engine {
 		r.Use(gin.Logger())
 	}
 
+	r.GET("/status", app.getStatus)
+	r.GET("/stats", app.getStats)
+
 	// Authenticated routes
 	secured := r.Group("/")
 	secured.Use(app.authMiddleware())
 	{
-		secured.GET("/status", app.getStatus)
 		secured.POST("/toggle", app.toggleStatus)
-		secured.GET("/stats", app.getStats)
 	}
 
 	return r

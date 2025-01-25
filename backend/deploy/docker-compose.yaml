@@ -1,7 +1,7 @@
 version: '3.8'
 
 services:
-  manager:
+  sede:
     image: ghcr.io/metro-olografix/sede:dev
     restart: unless-stopped
     pull_policy: always

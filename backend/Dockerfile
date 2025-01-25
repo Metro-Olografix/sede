@@ -8,7 +8,7 @@ RUN go mod download
 
 COPY . .
 
-RUN GOOS=linux go build -o /app/server main.go
+RUN CGO_ENABLED=1 GOOS=linux go build -o /app/server main.go
 
 # build container
 FROM alpine:3.14

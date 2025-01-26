@@ -14,9 +14,12 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/gin-contrib/cors"
 	"github.com/gin-contrib/secure"
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
+	"github.com/ulule/limiter/v3"
+	"github.com/ulule/limiter/v3/drivers/store/memory"
 	"golang.org/x/crypto/bcrypt"
 	"golang.org/x/time/rate"
 	"gorm.io/driver/sqlite"
@@ -32,12 +35,16 @@ const (
 	daysToAnalyze     = 30
 
 	// Security constants
-	maxRequestSize    = 1024 * 1024 // 1MB
 	rateLimitRequests = 100
 	rateLimitDuration = time.Minute
 	bcryptCost        = 12
 	contextTimeout    = 30 * time.Second
 	shutdownTimeout   = 5 * time.Second
+
+	// Database connection settings
+	dbConnMaxLifetime = 5 * time.Minute
+	dbMaxOpenConns    = 25
+	dbMaxIdleConns    = 5
 )
 
 var (
@@ -81,11 +88,13 @@ type Config struct {
 
 // App represents the application instance
 type App struct {
-	db         *gorm.DB
-	config     Config
-	validate   *validator.Validate
-	limiter    *rate.Limiter
-	apiKeyHash []byte
+	db          *gorm.DB
+	config      Config
+	validate    *validator.Validate
+	limiter     *rate.Limiter
+	apiKeyHash  []byte
+	rateLimiter *limiter.Limiter
+	store       limiter.Store
 }
 
 // NewApp creates a new application instance with security configurations
@@ -129,14 +138,29 @@ func NewApp(config Config) (*App, error) {
 		return nil, fmt.Errorf("failed to connect to database: %w", err)
 	}
 
-	// Set connection pool settings
+	// Configure rate limiter with IP-based limiting
+	store := memory.NewStore()
+	rateLimiter := limiter.New(store, limiter.Rate{
+		Period: rateLimitDuration,
+		Limit:  rateLimitRequests,
+	})
+
+	// Configure database with proper error handling
 	sqlDB, err := db.DB()
 	if err != nil {
-		return nil, fmt.Errorf("failed to configure database: %w", err)
+		return nil, fmt.Errorf("failed to get database instance: %w", err)
 	}
-	sqlDB.SetMaxOpenConns(25)
-	sqlDB.SetMaxIdleConns(5)
-	sqlDB.SetConnMaxLifetime(5 * time.Minute)
+
+	sqlDB.SetMaxOpenConns(dbMaxOpenConns)
+	sqlDB.SetMaxIdleConns(dbMaxIdleConns)
+	sqlDB.SetConnMaxLifetime(dbConnMaxLifetime)
+
+	// Test database connection
+	ctx, cancel := context.WithTimeout(context.Background(), contextTimeout)
+	defer cancel()
+	if err := sqlDB.PingContext(ctx); err != nil {
+		return nil, fmt.Errorf("failed to ping database: %w", err)
+	}
 
 	// Auto migrate the schema with default values for new columns
 	if err := db.AutoMigrate(&SedeStatus{}); err != nil {
@@ -144,11 +168,13 @@ func NewApp(config Config) (*App, error) {
 	}
 
 	return &App{
-		db:         db,
-		config:     config,
-		validate:   validator.New(),
-		limiter:    rate.NewLimiter(rate.Every(rateLimitDuration/rateLimitRequests), rateLimitRequests),
-		apiKeyHash: apiKeyHash,
+		db:          db,
+		config:      config,
+		validate:    validator.New(),
+		limiter:     rate.NewLimiter(rate.Every(rateLimitDuration/rateLimitRequests), rateLimitRequests),
+		apiKeyHash:  apiKeyHash,
+		rateLimiter: rateLimiter,
+		store:       store,
 	}, nil
 }
 
@@ -160,13 +186,30 @@ func (app *App) setupRouter() *gin.Engine {
 
 	r := gin.New()
 
+	// Default allowed origins
+	defaultOrigins := []string{}
+
+	// CORS configuration
+	corsConfig := cors.Config{
+		AllowOrigins:     defaultOrigins,
+		AllowMethods:     []string{"GET", "POST", "OPTIONS"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "X-API-KEY", "Authorization"},
+		ExposeHeaders:    []string{"Content-Length"},
+		AllowCredentials: true,
+		MaxAge:           12 * time.Hour,
+	}
+
+	// Add custom origins from config if they exist
+	if len(app.config.AllowedOrigins) > 0 && app.config.AllowedOrigins[0] != "" {
+		corsConfig.AllowOrigins = append(corsConfig.AllowOrigins, app.config.AllowedOrigins...)
+	}
+
 	// Security middleware
 	r.Use(
 		gin.Recovery(),
 		app.secureMiddleware(),
 		app.rateLimitMiddleware(),
-		app.corsMiddleware(),
-		app.maxBodyMiddleware(maxRequestSize),
+		cors.New(corsConfig),
 	)
 
 	if app.config.Debug {
@@ -200,41 +243,25 @@ func (app *App) secureMiddleware() gin.HandlerFunc {
 	})
 }
 
-// Rate limiting middleware
+// Rate limiting middleware with IP-based limiting
 func (app *App) rateLimitMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if !app.limiter.Allow() {
+		ip := c.ClientIP()
+		ctx := c.Request.Context()
+
+		limiterCtx, err := app.rateLimiter.Get(ctx, ip)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "rate limit error"})
+			c.Abort()
+			return
+		}
+
+		if limiterCtx.Reached {
 			c.JSON(http.StatusTooManyRequests, gin.H{"error": "rate limit exceeded"})
 			c.Abort()
 			return
 		}
-		c.Next()
-	}
-}
 
-// CORS middleware with secure configuration
-func (app *App) corsMiddleware() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		origin := c.Request.Header.Get("Origin")
-		if app.isAllowedOrigin(origin) {
-			c.Header("Access-Control-Allow-Origin", origin)
-			c.Header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-			c.Header("Access-Control-Allow-Headers", "Content-Type, X-API-KEY")
-			c.Header("Access-Control-Max-Age", "86400")
-		}
-
-		if c.Request.Method == "OPTIONS" {
-			c.AbortWithStatus(http.StatusNoContent)
-			return
-		}
-		c.Next()
-	}
-}
-
-// Maximum body size middleware
-func (app *App) maxBodyMiddleware(maxBytes int64) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxBytes)
 		c.Next()
 	}
 }
@@ -348,23 +375,6 @@ func (app *App) getStats(c *gin.Context) {
 	c.JSON(http.StatusOK, stats)
 }
 
-// Helper functions with security considerations
-func (app *App) isAllowedOrigin(origin string) bool {
-	if len(app.config.AllowedOrigins) == 0 {
-		return false
-	}
-
-	for _, allowed := range app.config.AllowedOrigins {
-		if allowed == "*" {
-			return true
-		}
-		if strings.EqualFold(allowed, origin) {
-			return true
-		}
-	}
-	return false
-}
-
 func validateConfig(config Config) error {
 	if config.Port == "" {
 		return fmt.Errorf("port is required")
@@ -388,11 +398,18 @@ func getEnvOrDefault(key, defaultValue string) string {
 func main() {
 	// Initialize configuration with secure defaults
 	config := Config{
-		APIKey:         getEnvOrDefault("API_KEY", "change-me"),
-		Port:           getEnvOrDefault("PORT", defaultPort),
-		Debug:          getEnvOrDefault("DEBUG", "false") == "true",
-		AllowedOrigins: strings.Split(getEnvOrDefault("ALLOWED_ORIGINS", ""), ","),
-		HashAPIKey:     getEnvOrDefault("HASH_API_KEY", "true") == "true",
+		APIKey: getEnvOrDefault("API_KEY", "change-me"),
+		Port:   getEnvOrDefault("PORT", defaultPort),
+		Debug:  getEnvOrDefault("DEBUG", "false") == "true",
+		// Split only if not empty
+		AllowedOrigins: func() []string {
+			origins := getEnvOrDefault("ALLOWED_ORIGINS", "")
+			if origins == "" {
+				return nil
+			}
+			return strings.Split(origins, ",")
+		}(),
+		HashAPIKey: getEnvOrDefault("HASH_API_KEY", "true") == "true",
 	}
 
 	// Create application instance
@@ -427,16 +444,18 @@ func main() {
 		<-quit
 		log.Println("Shutting down server...")
 
-		ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 		defer cancel()
 
-		// Close database connection
+		// Close database connection with timeout
 		if sqlDB, err := app.db.DB(); err == nil {
-			sqlDB.Close()
+			if err := sqlDB.Close(); err != nil {
+				log.Printf("Error closing database connection: %v", err)
+			}
 		}
 
-		if err := srv.Shutdown(ctx); err != nil {
-			log.Fatalf("Server forced to shutdown: %v", err)
+		if err := srv.Shutdown(shutdownCtx); err != nil {
+			log.Printf("Server forced to shutdown: %v", err)
 		}
 	}()
 

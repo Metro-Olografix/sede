@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HQ Opening Probability</title>
+    <style>
+        :root {
+            --color-closed: #ff4444;
+            --color-open: #44ff44;
+            --cell-shadow: 2px 2px 5px rgba(0, 0, 0, 0.15);
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 2rem auto;
+            padding: 0 1rem;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 2rem;
+        }
+
+        th, td {
+            border: 2px solid black;
+            padding: 0.5rem;
+            text-align: center;
+            transition: box-shadow 0.3s ease;
+            box-shadow: var(--cell-shadow);
+        }
+
+        th {
+            background: #ddd;
+            font-weight: bold;
+        }
+
+        td:hover {
+            box-shadow: 4px 4px 10px rgba(0,0,0,0.25);
+        }
+
+        .legend {
+            display: flex;
+            justify-content: center;
+            gap: 1rem;
+            margin-top: 2rem;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <h1>HQ Opening Probability</h1>
+    <table id="breakdown-table"></table>
+    
+    <div class="legend">
+        <div class="legend-item">
+            <div class="legend-color" style="background: var(--color-closed);"></div>
+            <span>Closed (0%)</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: var(--color-open);"></div>
+            <span>Open (100%)</span>
+        </div>
+    </div>
+
+    <script>
+        async function loadTable() {
+            try {
+                const response = await fetch('/stats');
+                const data = await response.json();
+                
+                const table = document.getElementById('breakdown-table');
+                const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+                const hours = [];
+                for (let h = 9; h <= 21; h++) {
+                    hours.push(h.toString().padStart(2, '0') + ":00");
+                }
+                // Prepare arrays to store colors for each day column
+                const dayColors = {};
+                days.forEach(day => { dayColors[day] = []; });
+                
+                // Build colgroup: first column for hour labels then one col per day with id
+                let colgroupHTML = '<col>';
+                days.forEach(day => { colgroupHTML += `<col id="col-${day}">`; });
+                
+                // Build header row with an empty top-left cell
+                let headerRow = '<tr><th></th>';
+                days.forEach(day => { headerRow += `<th>${day}</th>`; });
+                headerRow += '</tr>';
+                
+                // Build table rows; also populate dayColors array per cell
+                let tableHTML = `<colgroup>${colgroupHTML}</colgroup>` + headerRow;
+                hours.forEach(hourStr => {
+                    let row = `<tr><td>${hourStr}</td>`;
+                    days.forEach(dayName => {
+                        const dayData = data.find(d => d.day === dayName) || { hourly: [] };
+                        const hr = hourStr.substring(0, 2);
+                        const hourStat = dayData.hourly.find(h => h.hour === hr);
+                        const prob = hourStat ? hourStat.probability : 0;
+                        const cellColor = interpolateColor(
+                            getComputedStyle(document.documentElement).getPropertyValue('--color-closed'),
+                            getComputedStyle(document.documentElement).getPropertyValue('--color-open'),
+                            prob
+                        );
+                        // Save computed color for gradient
+                        dayColors[dayName].push(cellColor);
+                        // Build an empty cell (col's background will show)
+                        row += `<td></td>`;
+                    });
+                    row += '</tr>';
+                    tableHTML += row;
+                });
+                table.innerHTML = tableHTML;
+                
+                // For each day column, compute gradient from the array of colors
+                days.forEach(day => {
+                    const colors = dayColors[day];
+                    const stops = colors.map((color, i) => {
+                        // Position (0 to 100%)
+                        const pos = Math.round((i / (colors.length - 1)) * 100);
+                        return `${color} ${pos}%`;
+                    }).join(', ');
+                    const gradient = `linear-gradient(to bottom, ${stops})`;
+                    const colElem = document.getElementById(`col-${day}`);
+                    if(colElem) {
+                        colElem.style.background = gradient;
+                    }
+                });
+            } catch (error) {
+                console.error('Error loading data:', error);
+                alert('Failed to load table data');
+            }
+        }
+        
+        function interpolateColor(color1, color2, factor) {
+            const hex = (c) => parseInt(c.trim().substring(1), 16);
+            const r1 = hex(color1) >> 16;
+            const g1 = (hex(color1) >> 8) & 0xff;
+            const b1 = hex(color1) & 0xff;
+            const r2 = hex(color2) >> 16;
+            const g2 = (hex(color2) >> 8) & 0xff;
+            const b2 = hex(color2) & 0xff;
+            
+            const r = Math.round(r1 + (r2 - r1) * factor);
+            const g = Math.round(g1 + (g2 - g1) * factor);
+            const b = Math.round(b1 + (b2 - b1) * factor);
+            
+            return `#${((1 << 24) | (r << 16) | (g << 8) | b).toString(16).slice(1)}`;
+        }
+        
+        loadTable();
+    </script>
+</body>
+</html>

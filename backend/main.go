@@ -315,6 +315,12 @@ func (app *App) toggleStatus(c *gin.Context) {
 	var lastStatus SedeStatus
 	result := app.db.WithContext(ctx).Order("timestamp desc").First(&lastStatus)
 
+	// Prevent toggling within one minute of the last change
+	if result.Error == nil && time.Since(lastStatus.Timestamp) < time.Minute {
+		c.JSON(http.StatusTooManyRequests, gin.H{"error": "Status cannot be toggled within one minute"})
+		return
+	}
+
 	newStatus := SedeStatus{
 		IsOpen:    true,
 		Timestamp: time.Now().UTC(), // Always use UTC

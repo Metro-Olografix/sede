@@ -10,6 +10,7 @@ import (
 	"github.com/go-playground/validator/v10"
 	"github.com/metro-olografix/sede/internal/config"
 	"github.com/metro-olografix/sede/internal/database"
+	"github.com/metro-olografix/sede/internal/notification"
 	"github.com/ulule/limiter/v3"
 	"github.com/ulule/limiter/v3/drivers/store/memory"
 	"golang.org/x/crypto/bcrypt"
@@ -23,6 +24,7 @@ type App struct {
 	limiter     *rate.Limiter
 	apiKeyHash  []byte
 	rateLimiter *limiter.Limiter
+	telegram    *notification.Telegram
 }
 
 const (
@@ -53,6 +55,12 @@ func NewApp(cfg config.Config) (*App, error) {
 		Period: rateLimitDuration,
 		Limit:  rateLimitRequests,
 	})
+
+	telegram, err := notification.NewTelegram(cfg)
+	if err != nil {
+		log.Printf("telegram notification not initialized: %s", err.Error())
+	}
+	app.telegram = telegram
 
 	return app, nil
 }

@@ -33,12 +33,19 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&cfg.AllowedOriginsStr, "allowed-origins", "*", "Comma-separated list of allowed origins")
 	rootCmd.PersistentFlags().BoolVar(&cfg.HashAPIKey, "hash-api-key", true, "Hash API key")
 
+	rootCmd.PersistentFlags().StringVar(&cfg.TelegramToken, "telegram-token", "", "Telegram bot token")
+	rootCmd.PersistentFlags().Int64Var(&cfg.TelegramChatId, "telegram-chat-id", 0, "Telegram chat ID")
+	rootCmd.PersistentFlags().IntVar(&cfg.TelegramChatThreadId, "telegram-chat-thread-id", 0, "Telegram chat thread ID")
+
 	// Bind flags to viper
 	viper.BindPFlag("port", rootCmd.PersistentFlags().Lookup("port"))
 	viper.BindPFlag("api_key", rootCmd.PersistentFlags().Lookup("api-key"))
 	viper.BindPFlag("debug", rootCmd.PersistentFlags().Lookup("debug"))
 	viper.BindPFlag("allowed_origins", rootCmd.PersistentFlags().Lookup("allowed-origins"))
 	viper.BindPFlag("hash_api_key", rootCmd.PersistentFlags().Lookup("hash-api-key"))
+	viper.BindPFlag("telegram_token", rootCmd.PersistentFlags().Lookup("telegram-token"))
+	viper.BindPFlag("telegram_chat_id", rootCmd.PersistentFlags().Lookup("telegram-chat-id"))
+	viper.BindPFlag("telegram_chat_thread_id", rootCmd.PersistentFlags().Lookup("telegram-chat-thread-id"))
 }
 
 func initConfig() {
@@ -51,6 +58,9 @@ func initConfig() {
 	cfg.Debug = viper.GetBool("debug")
 	cfg.AllowedOriginsStr = viper.GetString("allowed_origins")
 	cfg.HashAPIKey = viper.GetBool("hash_api_key")
+	cfg.TelegramToken = viper.GetString("telegram_token")
+	cfg.TelegramChatId = viper.GetInt64("telegram_chat_id")
+	cfg.TelegramChatThreadId = viper.GetInt("telegram_chat_thread_id")
 }
 
 func Execute() {

@@ -104,6 +104,20 @@ func (a *App) toggleStatus(c *gin.Context) {
 		return
 	}
 
+	if a.telegram.IsInitialized() {
+		go func() {
+			var msg string
+			if newStatus.IsOpen {
+				msg = "🟢 sede aperta"
+			} else {
+				msg = "🔴 sede chiusa"
+			}
+			if err := a.telegram.Send(msg); err != nil {
+				log.Printf("Failed to send Telegram notification: %v", err)
+			}
+		}()
+	}
+
 	c.String(http.StatusOK, fmt.Sprintf("%v", newStatus.IsOpen))
 }
 

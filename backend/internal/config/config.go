@@ -15,6 +15,10 @@ type Config struct {
 	AllowedOriginsStr string
 	HashAPIKey        bool
 	DatabasePath      string
+
+	TelegramToken        string
+	TelegramChatId       int64
+	TelegramChatThreadId int
 }
 
 func ValidateAndSetDefaults(cfg Config) Config {

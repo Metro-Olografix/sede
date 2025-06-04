@@ -201,6 +201,7 @@ func (a *App) getCardName(ctx context.Context, cardID, hash string, c *gin.Conte
 
 	cardName := string(nameBytes)
 	cardName = strings.Split(cardName, " ")[0]
+	cardName = strings.ReplaceAll(cardName, "\"", "")
 	return cardName
 }
 

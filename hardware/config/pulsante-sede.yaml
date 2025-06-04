@@ -26,6 +26,12 @@ globals:
     type: bool
     restore_value: true
     initial_value: 'false'
+  - id: card_id
+    type: std::string
+    initial_value: ''
+  - id: card_hash
+    type: std::string
+    initial_value: ''
 
 api:
   encryption:
@@ -62,6 +68,9 @@ wifi:
                               green: 100%
                               blue: 0%
                               effect: none
+                          - globals.set:
+                              id: sede_state
+                              value: 'true'
                         else:
                           - light.turn_on:
                               id: rgb_light
@@ -69,15 +78,24 @@ wifi:
                               green: 0%
                               blue: 0%
                               effect: none
+                          - globals.set:
+                              id: sede_state
+                              value: 'false'
                   else:
                     - light.turn_on:
                         id: rgb_light
                         effect: "Errore"
+                    - globals.set:
+                        id: sede_state
+                        value: 'false'
           on_error:
             then:
               - light.turn_on:
                   id: rgb_light
                   effect: "Errore"
+              - globals.set:
+                  id: sede_state
+                  value: 'false'
 
 output:
   - platform: ledc
@@ -118,35 +136,32 @@ light:
               green: 0%
               blue: 0%
               duration: 500ms
-      - lambda:
-          name: "Arcobaleno"
-          lambda: |-
-            static float hue = 0.0;
-            auto now = millis();
-            if (now % 10 == 0) {
-              hue = hue + 0.1;
-              if (hue > 1.0)
-                hue = 0.0;
-              float red, green, blue;
-              float h = hue;
-              int i = int(h * 6);
-              float f = h * 6 - i;
-              float p = 1.0 * (1 - 1.0);
-              float q = 1.0 * (1 - f * 1.0);
-              float t = 1.0 * (1 - (1 - f) * 1.0);
-
-              switch (i % 6) {
-                case 0: red = 1.0, green = t, blue = p; break;
-                case 1: red = q, green = 1.0, blue = p; break;
-                case 2: red = p, green = 1.0, blue = t; break;
-                case 3: red = p, green = q, blue = 1.0; break;
-                case 4: red = t, green = p, blue = 1.0; break;
-                case 5: red = 1.0, green = p, blue = q; break;
-              }
-              auto call = id(rgb_light).turn_on();
-              call.set_rgb(red, green, blue);
-              call.perform();
-            }
+      - strobe:
+          name: "CartaRiconosciuta"
+          colors:
+            - state: true
+              red: 100%
+              green: 0%
+              blue: 100%
+              duration: 500ms
+            - state: false
+              red: 0%
+              green: 0%
+              blue: 0%
+              duration: 500ms
+      - strobe:
+          name: "CartaNonRiconosciuta"
+          colors:
+            - state: true
+              red: 100%
+              green: 50%
+              blue: 0%
+              duration: 300ms
+            - state: false
+              red: 0%
+              green: 0%
+              blue: 0%
+              duration: 300ms
 
 binary_sensor:
   - platform: gpio
@@ -167,6 +182,10 @@ binary_sensor:
             url: !secret sede_toggle_url
             headers:
               X-API-KEY: !secret sede_api_key
+              Content-Type: application/json
+            json:
+              cardId: !lambda 'return id(card_id);'
+              hash: !lambda 'return id(card_hash);'
             capture_response: true
             on_response:
               then:
@@ -184,6 +203,9 @@ binary_sensor:
                                 green: 100%
                                 blue: 0%
                                 effect: none
+                            - globals.set:
+                                id: sede_state
+                                value: 'true'
                           else:
                             - light.turn_on:
                                 id: rgb_light
@@ -191,12 +213,152 @@ binary_sensor:
                                 green: 0%
                                 blue: 0%
                                 effect: none
+                            - globals.set:
+                                id: sede_state
+                                value: 'false'
                     else:
                       - light.turn_on:
                           id: rgb_light
                           effect: "Errore"
+                      - globals.set:
+                          id: sede_state
+                          value: 'false'
             on_error:
               then:
                 - light.turn_on:
                     id: rgb_light
                     effect: "Errore"
+                - globals.set:
+                    id: sede_state
+                    value: 'false'
+
+i2c:
+  sda: GPIO5
+  scl: GPIO6
+  scan: true
+  id: nfcread
+
+pn532_i2c:
+  update_interval: 1s
+  i2c_id: nfcread
+  on_tag:
+    then:
+      - lambda: |-
+          ESP_LOGI("PN532", "Tag: %s", x.c_str());
+          std::string tag_id = x;
+          id(card_id) = tag_id;
+          
+          // Reset card_hash before processing
+          id(card_hash) = "";
+          
+          // Check if tag has NDEF data
+          if (!tag.has_ndef_message()) {
+            ESP_LOGI("PN532", "No NDEF data");
+            return;
+          }
+          
+          // Get the NDEF message
+          auto message = tag.get_ndef_message();
+          auto records = message->get_records();
+                    
+          // Process each record
+          int count = 0;
+          std::string tag_hash;
+          for (auto &record : records) {
+            count++;
+            std::string type = record->get_type();
+            std::string payload = record->get_payload();
+                        
+            if (type == "T") {
+              id(card_hash) = payload;
+              // Text record - skip language code bytes
+              if (payload.length() > 0) {
+                uint8_t lang_length = payload[0] & 0x3F;
+                std::string text = payload.substr(1 + lang_length);
+                tag_hash = text;
+                break;
+              }
+            }
+          }
+
+      # Check if card was successfully recognized (has hash)
+      - if:
+          condition:
+            lambda: 'return !id(card_hash).empty();'
+          then:
+            # Card recognized - show success effect
+            - light.turn_on:
+                id: rgb_light
+                effect: "CartaRiconosciuta"
+            
+            - delay: 30sec
+            
+            - lambda: |-
+                // Print sede state and card id and card hash
+                ESP_LOGI("PN532", "Sede State: %s, Card ID: %s, Card Hash: %s", 
+                         id(sede_state) ? "true" : "false", 
+                         id(card_id).c_str(), 
+                         id(card_hash).c_str());
+
+            - globals.set:
+                id: card_id
+                value: !lambda 'return "";'
+            - globals.set:
+                id: card_hash
+                value: !lambda 'return "";'
+            
+            # Set LED to match sede_state
+            - if:
+                condition:
+                  lambda: 'return id(sede_state);'
+                then:
+                  - light.turn_on:
+                      id: rgb_light
+                      red: 0%
+                      green: 100%
+                      blue: 0%
+                      effect: none
+                else:
+                  - light.turn_on:
+                      id: rgb_light
+                      red: 100%
+                      green: 0%
+                      blue: 0%
+                      effect: none
+          else:
+            # Card not recognized - show error effect
+            - lambda: |-
+                ESP_LOGI("PN532", "Card not recognized - no valid hash found. Card ID: %s", 
+                         id(card_id).c_str());
+            
+            - light.turn_on:
+                id: rgb_light
+                effect: "CartaNonRiconosciuta"
+
+            - globals.set:
+                id: card_id
+                value: !lambda 'return "";'
+            - globals.set:
+                id: card_hash
+                value: !lambda 'return "";'
+
+            - delay: 5sec
+                        
+            # Return to previous state
+            - if:
+                condition:
+                  lambda: 'return id(sede_state);'
+                then:
+                  - light.turn_on:
+                      id: rgb_light
+                      red: 0%
+                      green: 100%
+                      blue: 0%
+                      effect: none
+                else:
+                  - light.turn_on:
+                      id: rgb_light
+                      red: 100%
+                      green: 0%
+                      blue: 0%
+                      effect: none

@@ -9,7 +9,7 @@ services:
     restart: always
     privileged: true
     ports:
-      - 6052:6052
+      - 8081:6052
     environment:
       - USERNAME=test
       - PASSWORD=ChangeMe

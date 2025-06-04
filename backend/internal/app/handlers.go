@@ -1,12 +1,17 @@
 package app
 
 import (
+	"bytes"
 	"context"
 	"crypto/subtle"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -77,7 +82,18 @@ func (a *App) getStatus(c *gin.Context) {
 	c.String(http.StatusOK, fmt.Sprintf("%v", status.IsOpen))
 }
 
+type ToggleStatusRequest struct {
+	CardID string `json:"cardId"`
+	Hash   string `json:"hash"`
+}
+
 func (a *App) toggleStatus(c *gin.Context) {
+	var req ToggleStatusRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Invalid JSON"})
+		return
+	}
+
 	ctx, cancel := context.WithTimeout(c.Request.Context(), contextTimeout)
 	defer cancel()
 
@@ -94,6 +110,16 @@ func (a *App) toggleStatus(c *gin.Context) {
 		return
 	}
 
+	// Get card name via POST request
+	var cardName string
+	if req.CardID != "" && req.Hash != "" {
+		cardName = a.getCardName(ctx, req.CardID, req.Hash, c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	// Toggle status
 	newStatus := database.SedeStatus{
 		IsOpen:    !currentStatus.IsOpen,
 		Timestamp: time.Now().UTC(),
@@ -104,21 +130,78 @@ func (a *App) toggleStatus(c *gin.Context) {
 		return
 	}
 
+	// Send notification
 	if a.telegram.IsInitialized() {
 		go func() {
 			var msg string
-			if newStatus.IsOpen {
-				msg = "🟢 sede aperta"
-			} else {
-				msg = "🔴 sede chiusa"
+			emoji := "🟢"
+			action := "aperta"
+			if !newStatus.IsOpen {
+				emoji = "🔴"
+				action = "chiusa"
 			}
+
+			if cardName != "" {
+				msg = fmt.Sprintf("%s sede %s da %s", emoji, action, cardName)
+			} else {
+				msg = fmt.Sprintf("%s sede %s", emoji, action)
+			}
+
 			if err := a.telegram.Send(msg); err != nil {
 				log.Printf("Failed to send Telegram notification: %v", err)
 			}
 		}()
 	}
 
-	c.String(http.StatusOK, fmt.Sprintf("%v", newStatus.IsOpen))
+	c.JSON(http.StatusOK, gin.H{"isOpen": newStatus.IsOpen})
+}
+
+func (a *App) getCardName(ctx context.Context, cardID, hash string, c *gin.Context) string {
+	client := &http.Client{Timeout: 10 * time.Second}
+
+	cardID = strings.ReplaceAll(cardID, "-", "")
+
+	payload := map[string]string{
+		"cardId": cardID,
+		"hash":   hash,
+	}
+
+	payloadBytes, err := json.Marshal(payload)
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Failed to create request"})
+		return ""
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", "https://manager.olografix.org/api/card/name", bytes.NewBuffer(payloadBytes))
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Failed to create request"})
+		return ""
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-TOKEN", os.Getenv("SEDE_MANAGER_API_TOKEN"))
+
+	resp, err := client.Do(req)
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusBadGateway, gin.H{"error": "Failed to contact card manager"})
+		return ""
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		c.AbortWithStatusJSON(http.StatusBadGateway, gin.H{"error": "Card manager returned error"})
+		return ""
+	}
+
+	nameBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("Failed to read card name response: %v", err)
+		return ""
+	}
+
+	cardName := string(nameBytes)
+	cardName = strings.Split(cardName, " ")[0]
+	return cardName
 }
 
 func (a *App) getStats(c *gin.Context) {

@@ -52,3 +52,31 @@ docker build -t sede .
 
 docker run -p 8080:8080 -e DEBUG=true -v ./database:/app/database sede
 ```
+
+### server MCP
+
+perchè non dare la possibilità agli LLM di sapere se la sede è aperta o chiusa?
+
+#### configurare Claude Desktop
+
+aggiungere dentro `claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "mx-sede": {
+      "command": "docker",
+      "args": [
+        "run",
+        "-i",
+        "--rm",
+        "ghcr.io/metro-olografix/sede/mcp:latest"
+      ]
+    }
+  }
+}
+```
+
+#### sviluppo locale
+
+https://modelcontextprotocol.io/quickstart/server#set-up-your-environment

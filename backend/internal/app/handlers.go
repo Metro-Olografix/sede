@@ -245,3 +245,77 @@ func handleDatabaseError(c *gin.Context, err error) bool {
 	}
 	return true
 }
+
+// Strutture handler per SpaceAPI (ci proviamo)
+type SpaceAPIResponse struct {
+	API      string                 `json:"api"`
+	Space    string                 `json:"space"`
+	Logo     string                 `json:"logo"`
+	URL      string                 `json:"url"`
+	Location map[string]interface{} `json:"location"`
+	State    SpaceAPIState          `json:"state"`
+	Contact  map[string]string      `json:"contact"`
+	Projects []string               `json:"projects"`
+	Links    []map[string]string    `json:"links"`
+}
+
+type SpaceAPIState struct {
+	Open       *bool  `json:"open"`
+	Message    string `json:"message"`
+}
+
+func (a *App) getSpaceAPI(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(c.Request.Context(), contextTimeout)
+	defer cancel()
+
+	status, err := a.repo.GetLatestStatus(ctx)
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		handleDatabaseError(c, err)
+		return
+	}
+
+	var isOpen *bool
+	
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		isOpen = &status.IsOpen
+		lastChange = status.Timestamp.Unix()
+	}
+
+	spaceAPI := SpaceAPIResponse{
+		API:   "15",
+		Space: "Metro Olografix",
+		Logo:  "https://olografix.org/images/metro-dark.png",
+		URL:   "https://olografix.org",
+		Location: map[string]interface{}{
+			"address":  "Viale Marconi 278/1, 65127 Pescara, Italy",
+			"lat":      44.989097,
+			"lon":      11.426034,
+			"timezone": "Europe/Rome",
+		},
+		State: SpaceAPIState{
+			Open:       isOpen,
+			Message:    "Ci riuniamo ogni lunedì sera dalle 21:00",
+		},
+		Contact: map[string]string{
+			"email":   "info@olografix.org",
+			"twitter": "@MetroOlografix",
+		},
+		Projects: []string{"https://github.com/Metro-Olografix"},
+		Links: []map[string]string{
+			{
+				"name":        "MOCA - Metro Olografix Camp",
+				"description": "Il più grande campeggio hacker in Italia",
+				"url":         "https://moca.olografix.org",
+			},
+			{
+				"name":        "Wikipedia",
+				"description": "Pagina Wikipedia di Metro Olografix",
+				"url":         "https://it.wikipedia.org/wiki/Metro_Olografix",
+			},
+		},
+	}
+
+	c.Header("Access-Control-Allow-Origin", "*")
+	c.Header("Cache-Control", "no-cache, must-revalidate")
+	c.JSON(http.StatusOK, spaceAPI)
+}

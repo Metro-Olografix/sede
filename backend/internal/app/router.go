@@ -46,6 +46,7 @@ func (a *App) setupRouter() *gin.Engine {
 	// Public routes
 	r.GET("/status", a.getStatus)
 	r.GET("/stats", a.getStats)
+	r.GET("/spaceapi.json", a.getSpaceAPI)
 
 	// Authenticated routes
 	secured := r.Group("/")

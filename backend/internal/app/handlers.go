@@ -246,9 +246,9 @@ func handleDatabaseError(c *gin.Context, err error) bool {
 	return true
 }
 
-// Strutture e handler per SpaceAPI (ci proviamo)
+// Structure and handler for SpaceAPI
 type SpaceAPIResponse struct {
-	APICompatibility []string               `json:"api_compatibility"` 
+	APICompatibility []string               `json:"api_compatibility"`
 	Space            string                 `json:"space"`
 	Logo             string                 `json:"logo"`
 	URL              string                 `json:"url"`
@@ -260,7 +260,7 @@ type SpaceAPIResponse struct {
 }
 
 type SpaceAPIState struct {
-	Open       bool  `json:"open"`
+	Open       bool   `json:"open"`
 	Message    string `json:"message"`
 	LastChange int64  `json:"lastchange"`
 }
@@ -277,30 +277,30 @@ func (a *App) getSpaceAPI(c *gin.Context) {
 
 	var isOpen bool
 	var lastChange int64
-	
+
 	if !errors.Is(err, gorm.ErrRecordNotFound) {
 		isOpen = status.IsOpen
 		lastChange = status.Timestamp.Unix()
 	}
 
 	spaceAPI := SpaceAPIResponse{
-		APICompatibility:   []string{"15"},
-		Space:              "Metro Olografix",
-		Logo:               "https://olografix.org/images/metro-dark.png",
-		URL:                "https://olografix.org",
+		APICompatibility: []string{"15"},
+		Space:            "Metro Olografix",
+		Logo:             "https://olografix.org/images/metro-dark.png",
+		URL:              "https://olografix.org",
 		Location: map[string]interface{}{
 			"address":  "Viale Marconi 278/1, 65126 Pescara, Italy",
-			"lat":      44.989097,
-			"lon":      11.426034,
+			"lat":      42.462536,
+			"lon":      14.215399,
 			"timezone": "Europe/Rome",
 		},
 		State: SpaceAPIState{
 			Open:       isOpen,
 			LastChange: lastChange,
-			Message:    "Ci riuniamo ogni lunedì sera dalle 21:00",
+			Message:    "We meet every Monday evening from 9:00 PM",
 		},
 		Contact: map[string]string{
-			"email":   "info@olografix.org",
+			"email": "info@olografix.org",
 		},
 		Projects: []string{"https://github.com/Metro-Olografix"},
 		Links: []map[string]string{
@@ -311,7 +311,7 @@ func (a *App) getSpaceAPI(c *gin.Context) {
 			},
 			{
 				"name":        "Wikipedia",
-				"description": "Pagina Wikipedia di Metro Olografix",
+				"description": "Metro Olografix Wikipedia page",
 				"url":         "https://it.wikipedia.org/wiki/Metro_Olografix",
 			},
 		},

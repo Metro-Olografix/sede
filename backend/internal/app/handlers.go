@@ -245,3 +245,79 @@ func handleDatabaseError(c *gin.Context, err error) bool {
 	}
 	return true
 }
+
+// Structure and handler for SpaceAPI
+type SpaceAPIResponse struct {
+	APICompatibility []string               `json:"api_compatibility"`
+	Space            string                 `json:"space"`
+	Logo             string                 `json:"logo"`
+	URL              string                 `json:"url"`
+	Location         map[string]interface{} `json:"location"`
+	State            SpaceAPIState          `json:"state"`
+	Contact          map[string]string      `json:"contact"`
+	Projects         []string               `json:"projects"`
+	Links            []map[string]string    `json:"links"`
+}
+
+type SpaceAPIState struct {
+	Open       bool   `json:"open"`
+	Message    string `json:"message"`
+	LastChange int64  `json:"lastchange"`
+}
+
+func (a *App) getSpaceAPI(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(c.Request.Context(), contextTimeout)
+	defer cancel()
+
+	status, err := a.repo.GetLatestStatus(ctx)
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		handleDatabaseError(c, err)
+		return
+	}
+
+	var isOpen bool
+	var lastChange int64
+
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		isOpen = status.IsOpen
+		lastChange = status.Timestamp.Unix()
+	}
+
+	spaceAPI := SpaceAPIResponse{
+		APICompatibility: []string{"15"},
+		Space:            "Metro Olografix",
+		Logo:             "https://olografix.org/images/metro-dark.png",
+		URL:              "https://olografix.org",
+		Location: map[string]interface{}{
+			"address":  "Viale Marconi 278/1, 65126 Pescara, Italy",
+			"lat":      42.462536,
+			"lon":      14.215399,
+			"timezone": "Europe/Rome",
+		},
+		State: SpaceAPIState{
+			Open:       isOpen,
+			LastChange: lastChange,
+			Message:    "We meet every Monday evening from 9:00 PM",
+		},
+		Contact: map[string]string{
+			"email": "info@olografix.org",
+		},
+		Projects: []string{"https://github.com/Metro-Olografix"},
+		Links: []map[string]string{
+			{
+				"name":        "MOCA - Metro Olografix Camp",
+				"description": "Il più antico campeggio hacker in Italia",
+				"url":         "https://moca.camp",
+			},
+			{
+				"name":        "Wikipedia",
+				"description": "Metro Olografix Wikipedia page",
+				"url":         "https://it.wikipedia.org/wiki/Metro_Olografix",
+			},
+		},
+	}
+
+	c.Header("Access-Control-Allow-Origin", "*")
+	c.Header("Cache-Control", "no-cache, must-revalidate")
+	c.JSON(http.StatusOK, spaceAPI)
+}

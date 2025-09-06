@@ -1,0 +1,375 @@
+?   	github.com/metro-olografix/sede/cmd/server	[no test files]
+?   	github.com/metro-olografix/sede/cmd/server/cmd	[no test files]
+=== RUN   TestGetStatus
+
+2025/09/06 23:39:37 /home/mic/Documents/olografix/sede/backend/internal/database/database.go:226
+[0.022ms] [rows:-] SELECT count(*) FROM sqlite_master WHERE type='table' AND name="sede_statuses"
+
+2025/09/06 23:39:37 /home/mic/Documents/olografix/sede/backend/internal/database/database.go:226
+[0.163ms] [rows:0] CREATE TABLE `sede_statuses` (`id` integer PRIMARY KEY AUTOINCREMENT,`is_open` numeric NOT NULL,`timestamp` datetime NOT NULL)
+
+2025/09/06 23:39:37 /home/mic/Documents/olografix/sede/backend/internal/database/database.go:226
+[0.063ms] [rows:0] CREATE INDEX `idx_sede_statuses_is_open` ON `sede_statuses`(`is_open`)
+
+2025/09/06 23:39:37 /home/mic/Documents/olografix/sede/backend/internal/database/database.go:226
+[0.046ms] [rows:0] CREATE INDEX `idx_sede_statuses_timestamp` ON `sede_statuses`(`timestamp`)
+2025/09/06 23:39:37 telegram notification not initialized: telegram token or chat id not set
+=== RUN   TestGetStatus/get_status_when_no_status_exists
+
+2025/09/06 23:39:37 /home/mic/Documents/olografix/sede/backend/internal/database/database.go:73
+[0.110ms] [rows:0] SELECT * FROM `sede_statuses` ORDER BY timestamp desc,`sede_statuses`.`id` LIMIT 1
+2025/09/06 23:39:37 Database error: record not found
+[GIN] 2025/09/06 - 23:39:37 | 500 |     143.998µs |                 | GET      "/status"
+=== RUN   TestGetStatus/get_status_when_status_exists_-_open
+
+2025/09/06 23:39:37 /home/mic/Documents/olografix/sede/backend/internal/database/database.go:78
+[0.163ms] [rows:1] INSERT INTO `sede_statuses` (`is_open`,`timestamp`) VALUES (true,"2025-09-06 21:39:37.373") RETURNING `id`
+
+2025/09/06 23:39:37 /home/mic/Documents/olografix/sede/backend/internal/database/database.go:73
+[0.039ms] [rows:1] SELECT * FROM `sede_statuses` ORDER BY timestamp desc,`sede_statuses`.`id` LIMIT 1
+[GIN] 2025/09/06 - 23:39:37 | 200 |      52.757µs |                 | GET      "/status"
+=== RUN   TestGetStatus/get_status_when_status_exists_-_closed
+
+2025/09/06 23:39:37 /home/mic/Documents/olografix/sede/backend/internal/database/database.go:78
+[0.092ms] [rows:1] INSERT INTO `sede_statuses` (`is_open`,`timestamp`) VALUES (false,"2025-09-06 21:39:37.374") RETURNING `id`
+
+2025/09/06 23:39:37 /home/mic/Documents/olografix/sede/backend/internal/database/database.go:73
+[0.028ms] [rows:1] SELECT * FROM `sede_statuses` ORDER BY timestamp desc,`sede_statuses`.`id` LIMIT 1
+[GIN] 2025/09/06 - 23:39:37 | 200 |      39.591µs |                 | GET      "/status"
+--- PASS: TestGetStatus (0.00s)
+    --- PASS: TestGetStatus/get_status_when_no_status_exists (0.00s)
+    --- PASS: TestGetStatus/get_status_when_status_exists_-_open (0.00s)
+    --- PASS: TestGetStatus/get_status_when_status_exists_-_closed (0.00s)
+=== RUN   TestToggleStatus
+
+2025/09/06 23:39:37 /home/mic/Documents/olografix/sede/backend/internal/database/database.go:226
+[0.015ms] [rows:-] SELECT count(*) FROM sqlite_master WHERE type='table' AND name="sede_statuses"
+
+2025/09/06 23:39:37 /home/mic/Documents/olografix/sede/backend/internal/database/database.go:226
+[0.099ms] [rows:0] CREATE TABLE `sede_statuses` (`id` integer PRIMARY KEY AUTOINCREMENT,`is_open` numeric NOT NULL,`timestamp` datetime NOT NULL)
+
+2025/09/06 23:39:37 /home/mic/Documents/olografix/sede/backend/internal/database/database.go:226
+[0.053ms] [rows:0] CREATE INDEX `idx_sede_statuses_timestamp` ON `sede_statuses`(`timestamp`)
+
+2025/09/06 23:39:37 /home/mic/Documents/olografix/sede/backend/internal/database/database.go:226
+[0.041ms] [rows:0] CREATE INDEX `idx_sede_statuses_is_open` ON `sede_statuses`(`is_open`)
+2025/09/06 23:39:37 telegram notification not initialized: telegram token or chat id not set
+=== RUN   TestToggleStatus/toggle_without_authentication
+[GIN] 2025/09/06 - 23:39:37 | 401 |       3.655µs |                 | POST     "/toggle"
+=== RUN   TestToggleStatus/toggle_with_invalid_API_key
+2025/09/06 23:39:37 [SECURITY] API key mismatch
+[GIN] 2025/09/06 - 23:39:37 | 401 |       3.683µs |                 | POST     "/toggle"
+=== RUN   TestToggleStatus/toggle_with_valid_API_key_-_no_existing_status
+
+2025/09/06 23:39:37 /home/mic/Documents/olografix/sede/backend/internal/database/database.go:73
+[0.050ms] [rows:0] SELECT * FROM `sede_statuses` ORDER BY timestamp desc,`sede_statuses`.`id` LIMIT 1
+
+2025/09/06 23:39:37 /home/mic/Documents/olografix/sede/backend/internal/database/database.go:78
+[0.104ms] [rows:1] INSERT INTO `sede_statuses` (`is_open`,`timestamp`) VALUES (true,"2025-09-06 21:39:37.375") RETURNING `id`
+[GIN] 2025/09/06 - 23:39:37 | 200 |     225.843µs |                 | POST     "/toggle"
+=== RUN   TestToggleStatus/toggle_with_cooldown_period_active
+
+2025/09/06 23:39:37 /home/mic/Documents/olografix/sede/backend/internal/database/database.go:78
+[0.196ms] [rows:1] INSERT INTO `sede_statuses` (`is_open`,`timestamp`) VALUES (true,"2025-09-06 21:39:07.375") RETURNING `id`
+
+2025/09/06 23:39:37 /home/mic/Documents/olografix/sede/backend/internal/database/database.go:73
+[0.059ms] [rows:1] SELECT * FROM `sede_statuses` ORDER BY timestamp desc,`sede_statuses`.`id` LIMIT 1
+[GIN] 2025/09/06 - 23:39:37 | 429 |       88.01µs |                 | POST     "/toggle"
+=== RUN   TestToggleStatus/toggle_with_invalid_JSON
+[GIN] 2025/09/06 - 23:39:37 | 400 |      11.245µs |                 | POST     "/toggle"
+--- PASS: TestToggleStatus (0.00s)
+    --- PASS: TestToggleStatus/toggle_without_authentication (0.00s)
+    --- PASS: TestToggleStatus/toggle_with_invalid_API_key (0.00s)
+    --- PASS: TestToggleStatus/toggle_with_valid_API_key_-_no_existing_status (0.00s)
+    --- PASS: TestToggleStatus/toggle_with_cooldown_period_active (0.00s)
+    --- PASS: TestToggleStatus/toggle_with_invalid_JSON (0.00s)
+=== RUN   TestGetStats
+
+2025/09/06 23:39:37 /home/mic/Documents/olografix/sede/backend/internal/database/database.go:226
+[0.016ms] [rows:-] SELECT count(*) FROM sqlite_master WHERE type='table' AND name="sede_statuses"
+
+2025/09/06 23:39:37 /home/mic/Documents/olografix/sede/backend/internal/database/database.go:226
+[0.110ms] [rows:0] CREATE TABLE `sede_statuses` (`id` integer PRIMARY KEY AUTOINCREMENT,`is_open` numeric NOT NULL,`timestamp` datetime NOT NULL)
+
+2025/09/06 23:39:37 /home/mic/Documents/olografix/sede/backend/internal/database/database.go:226
+[0.057ms] [rows:0] CREATE INDEX `idx_sede_statuses_timestamp` ON `sede_statuses`(`timestamp`)
+
+2025/09/06 23:39:37 /home/mic/Documents/olografix/sede/backend/internal/database/database.go:226
+[0.044ms] [rows:0] CREATE INDEX `idx_sede_statuses_is_open` ON `sede_statuses`(`is_open`)
+2025/09/06 23:39:37 telegram notification not initialized: telegram token or chat id not set
+=== RUN   TestGetStats/get_stats_with_no_data
+
+2025/09/06 23:39:37 /home/mic/Documents/olografix/sede/backend/internal/database/database.go:128
+[0.068ms] [rows:0] 
+        SELECT 
+            CASE strftime('%w', timestamp)
+                WHEN '0' THEN 'Sunday'
+                WHEN '1' THEN 'Monday'
+                WHEN '2' THEN 'Tuesday'
+                WHEN '3' THEN 'Wednesday'
+                WHEN '4' THEN 'Thursday'
+                WHEN '5' THEN 'Friday'
+                ELSE 'Saturday' END as day,
+            AVG(CASE WHEN is_open THEN 1.0 ELSE 0.0 END) as dailyProbability
+        FROM sede_statuses
+        WHERE timestamp >= date('now', '-90 days')
+        GROUP BY day
+        ORDER BY strftime('%w', timestamp)
+    
+
+2025/09/06 23:39:37 /home/mic/Documents/olografix/sede/backend/internal/database/database.go:156
+[0.055ms] [rows:0] 
+        SELECT 
+            CASE strftime('%w', timestamp)
+                WHEN '0' THEN 'Sunday'
+                WHEN '1' THEN 'Monday'
+                WHEN '2' THEN 'Tuesday'
+                WHEN '3' THEN 'Wednesday'
+                WHEN '4' THEN 'Thursday'
+                WHEN '5' THEN 'Friday'
+                ELSE 'Saturday' END as day,
+            strftime('%H', timestamp) as hour,
+            AVG(CASE WHEN is_open THEN 1.0 ELSE 0.0 END) as probability
+        FROM sede_statuses
+        WHERE timestamp >= date('now', '-90 days')
+          AND CAST(strftime('%H', timestamp) as integer) BETWEEN 9 AND 21
+        GROUP BY day, hour
+        ORDER BY strftime('%w', timestamp), hour
+    
+[GIN] 2025/09/06 - 23:39:37 | 200 |     191.656µs |                 | GET      "/stats"
+=== RUN   TestGetStats/get_stats_with_data
+
+2025/09/06 23:39:37 /home/mic/Documents/olografix/sede/backend/internal/database/database.go:78
+[0.174ms] [rows:1] INSERT INTO `sede_statuses` (`is_open`,`timestamp`) VALUES (true,"2025-09-05 21:39:37.376") RETURNING `id`
+
+2025/09/06 23:39:37 /home/mic/Documents/olografix/sede/backend/internal/database/database.go:78
+[0.084ms] [rows:1] INSERT INTO `sede_statuses` (`is_open`,`timestamp`) VALUES (false,"2025-09-06 09:39:37.376") RETURNING `id`
+
+2025/09/06 23:39:37 /home/mic/Documents/olografix/sede/backend/internal/database/database.go:128
+[0.055ms] [rows:2] 
+        SELECT 
+            CASE strftime('%w', timestamp)
+                WHEN '0' THEN 'Sunday'
+                WHEN '1' THEN 'Monday'
+                WHEN '2' THEN 'Tuesday'
+                WHEN '3' THEN 'Wednesday'
+                WHEN '4' THEN 'Thursday'
+                WHEN '5' THEN 'Friday'
+                ELSE 'Saturday' END as day,
+            AVG(CASE WHEN is_open THEN 1.0 ELSE 0.0 END) as dailyProbability
+        FROM sede_statuses
+        WHERE timestamp >= date('now', '-90 days')
+        GROUP BY day
+        ORDER BY strftime('%w', timestamp)
+    
+
+2025/09/06 23:39:37 /home/mic/Documents/olografix/sede/backend/internal/database/database.go:156
+[0.040ms] [rows:2] 
+        SELECT 
+            CASE strftime('%w', timestamp)
+                WHEN '0' THEN 'Sunday'
+                WHEN '1' THEN 'Monday'
+                WHEN '2' THEN 'Tuesday'
+                WHEN '3' THEN 'Wednesday'
+                WHEN '4' THEN 'Thursday'
+                WHEN '5' THEN 'Friday'
+                ELSE 'Saturday' END as day,
+            strftime('%H', timestamp) as hour,
+            AVG(CASE WHEN is_open THEN 1.0 ELSE 0.0 END) as probability
+        FROM sede_statuses
+        WHERE timestamp >= date('now', '-90 days')
+          AND CAST(strftime('%H', timestamp) as integer) BETWEEN 9 AND 21
+        GROUP BY day, hour
+        ORDER BY strftime('%w', timestamp), hour
+    
+[GIN] 2025/09/06 - 23:39:37 | 200 |     127.484µs |                 | GET      "/stats"
+--- PASS: TestGetStats (0.00s)
+    --- PASS: TestGetStats/get_stats_with_no_data (0.00s)
+    --- PASS: TestGetStats/get_stats_with_data (0.00s)
+=== RUN   TestGetSpaceAPI
+
+2025/09/06 23:39:37 /home/mic/Documents/olografix/sede/backend/internal/database/database.go:226
+[0.015ms] [rows:-] SELECT count(*) FROM sqlite_master WHERE type='table' AND name="sede_statuses"
+
+2025/09/06 23:39:37 /home/mic/Documents/olografix/sede/backend/internal/database/database.go:226
+[0.105ms] [rows:0] CREATE TABLE `sede_statuses` (`id` integer PRIMARY KEY AUTOINCREMENT,`is_open` numeric NOT NULL,`timestamp` datetime NOT NULL)
+
+2025/09/06 23:39:37 /home/mic/Documents/olografix/sede/backend/internal/database/database.go:226
+[0.059ms] [rows:0] CREATE INDEX `idx_sede_statuses_timestamp` ON `sede_statuses`(`timestamp`)
+
+2025/09/06 23:39:37 /home/mic/Documents/olografix/sede/backend/internal/database/database.go:226
+[0.043ms] [rows:0] CREATE INDEX `idx_sede_statuses_is_open` ON `sede_statuses`(`is_open`)
+2025/09/06 23:39:37 telegram notification not initialized: telegram token or chat id not set
+=== RUN   TestGetSpaceAPI/get_spaceapi_with_no_status
+
+2025/09/06 23:39:37 /home/mic/Documents/olografix/sede/backend/internal/database/database.go:73
+[0.056ms] [rows:0] SELECT * FROM `sede_statuses` ORDER BY timestamp desc,`sede_statuses`.`id` LIMIT 1
+[GIN] 2025/09/06 - 23:39:37 | 200 |     122.178µs |                 | GET      "/spaceapi.json"
+=== RUN   TestGetSpaceAPI/get_spaceapi_with_status
+
+2025/09/06 23:39:37 /home/mic/Documents/olografix/sede/backend/internal/database/database.go:78
+[0.114ms] [rows:1] INSERT INTO `sede_statuses` (`is_open`,`timestamp`) VALUES (true,"2025-09-06 21:39:37.377") RETURNING `id`
+
+2025/09/06 23:39:37 /home/mic/Documents/olografix/sede/backend/internal/database/database.go:73
+[0.033ms] [rows:1] SELECT * FROM `sede_statuses` ORDER BY timestamp desc,`sede_statuses`.`id` LIMIT 1
+[GIN] 2025/09/06 - 23:39:37 | 200 |      66.152µs |                 | GET      "/spaceapi.json"
+--- PASS: TestGetSpaceAPI (0.00s)
+    --- PASS: TestGetSpaceAPI/get_spaceapi_with_no_status (0.00s)
+    --- PASS: TestGetSpaceAPI/get_spaceapi_with_status (0.00s)
+=== RUN   TestAuthMiddleware
+
+2025/09/06 23:39:37 /home/mic/Documents/olografix/sede/backend/internal/database/database.go:226
+[0.017ms] [rows:-] SELECT count(*) FROM sqlite_master WHERE type='table' AND name="sede_statuses"
+
+2025/09/06 23:39:37 /home/mic/Documents/olografix/sede/backend/internal/database/database.go:226
+[0.098ms] [rows:0] CREATE TABLE `sede_statuses` (`id` integer PRIMARY KEY AUTOINCREMENT,`is_open` numeric NOT NULL,`timestamp` datetime NOT NULL)
+
+2025/09/06 23:39:37 /home/mic/Documents/olografix/sede/backend/internal/database/database.go:226
+[0.052ms] [rows:0] CREATE INDEX `idx_sede_statuses_timestamp` ON `sede_statuses`(`timestamp`)
+
+2025/09/06 23:39:37 /home/mic/Documents/olografix/sede/backend/internal/database/database.go:226
+[0.042ms] [rows:0] CREATE INDEX `idx_sede_statuses_is_open` ON `sede_statuses`(`is_open`)
+2025/09/06 23:39:37 telegram notification not initialized: telegram token or chat id not set
+=== RUN   TestAuthMiddleware/no_api_key
+=== RUN   TestAuthMiddleware/valid_api_key
+=== RUN   TestAuthMiddleware/invalid_api_key
+2025/09/06 23:39:37 [SECURITY] API key mismatch
+--- PASS: TestAuthMiddleware (0.00s)
+    --- PASS: TestAuthMiddleware/no_api_key (0.00s)
+    --- PASS: TestAuthMiddleware/valid_api_key (0.00s)
+    --- PASS: TestAuthMiddleware/invalid_api_key (0.00s)
+=== RUN   TestHashedAPIKey
+
+2025/09/06 23:39:37 /home/mic/Documents/olografix/sede/backend/internal/database/database.go:226
+[0.024ms] [rows:-] SELECT count(*) FROM sqlite_master WHERE type='table' AND name="sede_statuses"
+
+2025/09/06 23:39:37 /home/mic/Documents/olografix/sede/backend/internal/database/database.go:226
+[0.137ms] [rows:0] CREATE TABLE `sede_statuses` (`id` integer PRIMARY KEY AUTOINCREMENT,`is_open` numeric NOT NULL,`timestamp` datetime NOT NULL)
+
+2025/09/06 23:39:37 /home/mic/Documents/olografix/sede/backend/internal/database/database.go:226
+[0.064ms] [rows:0] CREATE INDEX `idx_sede_statuses_timestamp` ON `sede_statuses`(`timestamp`)
+
+2025/09/06 23:39:37 /home/mic/Documents/olografix/sede/backend/internal/database/database.go:226
+[0.050ms] [rows:0] CREATE INDEX `idx_sede_statuses_is_open` ON `sede_statuses`(`is_open`)
+2025/09/06 23:39:37 telegram notification not initialized: telegram token or chat id not set
+=== RUN   TestHashedAPIKey/hashed_api_key_authentication
+=== RUN   TestHashedAPIKey/hashed_api_key_with_wrong_key
+2025/09/06 23:39:37 [SECURITY] Invalid API key attempt
+--- PASS: TestHashedAPIKey (0.17s)
+    --- PASS: TestHashedAPIKey/hashed_api_key_authentication (0.06s)
+    --- PASS: TestHashedAPIKey/hashed_api_key_with_wrong_key (0.06s)
+=== RUN   TestUtilityFunctions
+=== RUN   TestUtilityFunctions/abortUnauthorized
+=== RUN   TestUtilityFunctions/handleDatabaseError_with_nil_error
+=== RUN   TestUtilityFunctions/handleDatabaseError_with_context_deadline_exceeded
+2025/09/06 23:39:37 Database error: context deadline exceeded
+--- PASS: TestUtilityFunctions (0.00s)
+    --- PASS: TestUtilityFunctions/abortUnauthorized (0.00s)
+    --- PASS: TestUtilityFunctions/handleDatabaseError_with_nil_error (0.00s)
+    --- PASS: TestUtilityFunctions/handleDatabaseError_with_context_deadline_exceeded (0.00s)
+PASS
+ok  	github.com/metro-olografix/sede/internal/app	0.179s
+=== RUN   TestValidateAndSetDefaults
+=== RUN   TestValidateAndSetDefaults/valid_config_with_all_fields
+=== RUN   TestValidateAndSetDefaults/valid_config_with_default_database_path
+=== RUN   TestValidateAndSetDefaults/debug_mode_with_short_API_key_should_not_panic
+=== RUN   TestValidateAndSetDefaults/invalid_port_should_panic
+=== RUN   TestValidateAndSetDefaults/short_API_key_in_production_should_panic
+--- PASS: TestValidateAndSetDefaults (0.00s)
+    --- PASS: TestValidateAndSetDefaults/valid_config_with_all_fields (0.00s)
+    --- PASS: TestValidateAndSetDefaults/valid_config_with_default_database_path (0.00s)
+    --- PASS: TestValidateAndSetDefaults/debug_mode_with_short_API_key_should_not_panic (0.00s)
+    --- PASS: TestValidateAndSetDefaults/invalid_port_should_panic (0.00s)
+    --- PASS: TestValidateAndSetDefaults/short_API_key_in_production_should_panic (0.00s)
+=== RUN   TestParseAndValidateOrigins
+=== RUN   TestParseAndValidateOrigins/empty_string
+=== RUN   TestParseAndValidateOrigins/single_valid_origin
+=== RUN   TestParseAndValidateOrigins/multiple_valid_origins
+=== RUN   TestParseAndValidateOrigins/mixed_valid_and_invalid_origins
+=== RUN   TestParseAndValidateOrigins/all_invalid_origins
+=== RUN   TestParseAndValidateOrigins/origins_with_spaces_are_invalid
+--- PASS: TestParseAndValidateOrigins (0.00s)
+    --- PASS: TestParseAndValidateOrigins/empty_string (0.00s)
+    --- PASS: TestParseAndValidateOrigins/single_valid_origin (0.00s)
+    --- PASS: TestParseAndValidateOrigins/multiple_valid_origins (0.00s)
+    --- PASS: TestParseAndValidateOrigins/mixed_valid_and_invalid_origins (0.00s)
+    --- PASS: TestParseAndValidateOrigins/all_invalid_origins (0.00s)
+    --- PASS: TestParseAndValidateOrigins/origins_with_spaces_are_invalid (0.00s)
+PASS
+ok  	github.com/metro-olografix/sede/internal/config	(cached)
+=== RUN   TestNew
+=== RUN   TestNew/successful_database_creation
+
+2025/09/06 23:20:07 /home/mic/Documents/olografix/sede/backend/internal/database/database.go:226
+[0.026ms] [rows:-] SELECT count(*) FROM sqlite_master WHERE type='table' AND name="sede_statuses"
+
+2025/09/06 23:20:07 /home/mic/Documents/olografix/sede/backend/internal/database/database.go:226
+[0.190ms] [rows:0] CREATE TABLE `sede_statuses` (`id` integer PRIMARY KEY AUTOINCREMENT,`is_open` numeric NOT NULL,`timestamp` datetime NOT NULL)
+
+2025/09/06 23:20:07 /home/mic/Documents/olografix/sede/backend/internal/database/database.go:226
+[0.078ms] [rows:0] CREATE INDEX `idx_sede_statuses_timestamp` ON `sede_statuses`(`timestamp`)
+
+2025/09/06 23:20:07 /home/mic/Documents/olografix/sede/backend/internal/database/database.go:226
+[0.056ms] [rows:0] CREATE INDEX `idx_sede_statuses_is_open` ON `sede_statuses`(`is_open`)
+=== RUN   TestNew/database_creation_with_invalid_path
+--- PASS: TestNew (0.00s)
+    --- PASS: TestNew/successful_database_creation (0.00s)
+    --- PASS: TestNew/database_creation_with_invalid_path (0.00s)
+=== RUN   TestCreateAndGetLatestStatus
+=== RUN   TestCreateAndGetLatestStatus/create_and_retrieve_status
+=== RUN   TestCreateAndGetLatestStatus/get_latest_from_multiple_statuses
+--- PASS: TestCreateAndGetLatestStatus (0.00s)
+    --- PASS: TestCreateAndGetLatestStatus/create_and_retrieve_status (0.00s)
+    --- PASS: TestCreateAndGetLatestStatus/get_latest_from_multiple_statuses (0.00s)
+=== RUN   TestGetStatistics
+=== RUN   TestGetStatistics/statistics_with_no_data
+=== RUN   TestGetStatistics/statistics_with_data
+--- PASS: TestGetStatistics (0.00s)
+    --- PASS: TestGetStatistics/statistics_with_no_data (0.00s)
+    --- PASS: TestGetStatistics/statistics_with_data (0.00s)
+=== RUN   TestGetWeeklyStats
+=== RUN   TestGetWeeklyStats/weekly_stats_with_no_data
+=== RUN   TestGetWeeklyStats/weekly_stats_with_data
+--- PASS: TestGetWeeklyStats (0.00s)
+    --- PASS: TestGetWeeklyStats/weekly_stats_with_no_data (0.00s)
+    --- PASS: TestGetWeeklyStats/weekly_stats_with_data (0.00s)
+=== RUN   TestSedeStatus
+=== RUN   TestSedeStatus/sede_status_creation
+--- PASS: TestSedeStatus (0.00s)
+    --- PASS: TestSedeStatus/sede_status_creation (0.00s)
+=== RUN   TestDailyStats
+=== RUN   TestDailyStats/daily_stats_creation
+--- PASS: TestDailyStats (0.00s)
+    --- PASS: TestDailyStats/daily_stats_creation (0.00s)
+PASS
+ok  	github.com/metro-olografix/sede/internal/database	(cached)
+=== RUN   TestNewTelegram
+=== RUN   TestNewTelegram/valid_telegram_config
+=== RUN   TestNewTelegram/missing_token
+=== RUN   TestNewTelegram/missing_chat_id
+=== RUN   TestNewTelegram/both_missing
+=== RUN   TestNewTelegram/valid_config_without_thread_id
+--- PASS: TestNewTelegram (0.18s)
+    --- PASS: TestNewTelegram/valid_telegram_config (0.15s)
+    --- PASS: TestNewTelegram/missing_token (0.00s)
+    --- PASS: TestNewTelegram/missing_chat_id (0.00s)
+    --- PASS: TestNewTelegram/both_missing (0.00s)
+    --- PASS: TestNewTelegram/valid_config_without_thread_id (0.03s)
+=== RUN   TestIsInitialized
+=== RUN   TestIsInitialized/uninitialized_telegram
+=== RUN   TestIsInitialized/initialized_telegram
+--- PASS: TestIsInitialized (0.03s)
+    --- PASS: TestIsInitialized/uninitialized_telegram (0.00s)
+    --- PASS: TestIsInitialized/initialized_telegram (0.03s)
+=== RUN   TestSend
+=== RUN   TestSend/send_with_uninitialized_telegram
+=== RUN   TestSend/send_parameters_validation
+--- PASS: TestSend (0.00s)
+    --- PASS: TestSend/send_with_uninitialized_telegram (0.00s)
+    --- PASS: TestSend/send_parameters_validation (0.00s)
+=== RUN   TestTelegramStruct
+=== RUN   TestTelegramStruct/telegram_struct_creation
+--- PASS: TestTelegramStruct (0.00s)
+    --- PASS: TestTelegramStruct/telegram_struct_creation (0.00s)
+PASS
+ok  	github.com/metro-olografix/sede/internal/notification	(cached)

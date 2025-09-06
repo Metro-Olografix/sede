@@ -290,8 +290,8 @@ func (a *App) getSpaceAPI(c *gin.Context) {
 		URL:              "https://olografix.org",
 		Location: map[string]interface{}{
 			"address":  "Viale Marconi 278/1, 65126 Pescara, Italy",
-			"lat":      42.462536,
-			"lon":      14.215399,
+			"lat":      42.454657,
+			"lon":      14.224055,
 			"timezone": "Europe/Rome",
 		},
 		State: SpaceAPIState{

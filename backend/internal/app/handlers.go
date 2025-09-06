@@ -246,22 +246,23 @@ func handleDatabaseError(c *gin.Context, err error) bool {
 	return true
 }
 
-// Strutture handler per SpaceAPI (ci proviamo)
+// Strutture e handler per SpaceAPI (ci proviamo)
 type SpaceAPIResponse struct {
-	API      string                 `json:"api"`
-	Space    string                 `json:"space"`
-	Logo     string                 `json:"logo"`
-	URL      string                 `json:"url"`
-	Location map[string]interface{} `json:"location"`
-	State    SpaceAPIState          `json:"state"`
-	Contact  map[string]string      `json:"contact"`
-	Projects []string               `json:"projects"`
-	Links    []map[string]string    `json:"links"`
+	APICompatibility []string               `json:"api_compatibility"` 
+	Space            string                 `json:"space"`
+	Logo             string                 `json:"logo"`
+	URL              string                 `json:"url"`
+	Location         map[string]interface{} `json:"location"`
+	State            SpaceAPIState          `json:"state"`
+	Contact          map[string]string      `json:"contact"`
+	Projects         []string               `json:"projects"`
+	Links            []map[string]string    `json:"links"`
 }
 
 type SpaceAPIState struct {
-	Open       *bool  `json:"open"`
+	Open       bool  `json:"open"`
 	Message    string `json:"message"`
+	LastChange int64  `json:"lastchange"`
 }
 
 func (a *App) getSpaceAPI(c *gin.Context) {
@@ -274,38 +275,39 @@ func (a *App) getSpaceAPI(c *gin.Context) {
 		return
 	}
 
-	var isOpen *bool
+	var isOpen bool
+	var lastChange int64
 	
 	if !errors.Is(err, gorm.ErrRecordNotFound) {
-		isOpen = &status.IsOpen
+		isOpen = status.IsOpen
 		lastChange = status.Timestamp.Unix()
 	}
 
 	spaceAPI := SpaceAPIResponse{
-		API:   "15",
-		Space: "Metro Olografix",
-		Logo:  "https://olografix.org/images/metro-dark.png",
-		URL:   "https://olografix.org",
+		APICompatibility:   []string{"15"},
+		Space:              "Metro Olografix",
+		Logo:               "https://olografix.org/images/metro-dark.png",
+		URL:                "https://olografix.org",
 		Location: map[string]interface{}{
-			"address":  "Viale Marconi 278/1, 65127 Pescara, Italy",
+			"address":  "Viale Marconi 278/1, 65126 Pescara, Italy",
 			"lat":      44.989097,
 			"lon":      11.426034,
 			"timezone": "Europe/Rome",
 		},
 		State: SpaceAPIState{
 			Open:       isOpen,
+			LastChange: lastChange,
 			Message:    "Ci riuniamo ogni lunedì sera dalle 21:00",
 		},
 		Contact: map[string]string{
 			"email":   "info@olografix.org",
-			"twitter": "@MetroOlografix",
 		},
 		Projects: []string{"https://github.com/Metro-Olografix"},
 		Links: []map[string]string{
 			{
 				"name":        "MOCA - Metro Olografix Camp",
-				"description": "Il più grande campeggio hacker in Italia",
-				"url":         "https://moca.olografix.org",
+				"description": "Il più antico campeggio hacker in Italia",
+				"url":         "https://moca.camp",
 			},
 			{
 				"name":        "Wikipedia",

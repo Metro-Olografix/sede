@@ -153,7 +153,7 @@ func (a *App) toggleStatus(c *gin.Context) {
 		}()
 	}
 
-	c.JSON(http.StatusOK, gin.H{"isOpen": newStatus.IsOpen})
+	c.String(http.StatusOK, fmt.Sprintf("%v", newStatus.IsOpen))
 }
 
 func (a *App) getCardName(ctx context.Context, cardID, hash string, c *gin.Context) string {

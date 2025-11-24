@@ -163,11 +163,9 @@ func TestToggleStatus(t *testing.T) {
 			t.Errorf("Expected status code %d, got %d", http.StatusOK, w.Code)
 		}
 
-		var response map[string]bool
-		json.Unmarshal(w.Body.Bytes(), &response)
-
-		if !response["isOpen"] {
-			t.Error("Expected status to be toggled to open (true)")
+		responseBody := w.Body.String()
+		if responseBody != "true" {
+			t.Errorf("Expected status to be toggled to open (true), got: %s", responseBody)
 		}
 	})
 

@@ -37,6 +37,9 @@ func init() {
 	rootCmd.PersistentFlags().Int64Var(&cfg.TelegramChatId, "telegram-chat-id", 0, "Telegram chat ID")
 	rootCmd.PersistentFlags().IntVar(&cfg.TelegramChatThreadId, "telegram-chat-thread-id", 0, "Telegram chat thread ID")
 
+	rootCmd.PersistentFlags().StringVar(&cfg.SpacesConfigPath, "spaces-config-path", "", "Path to the spaces.yaml config file")
+	rootCmd.PersistentFlags().StringVar(&cfg.DefaultSpaceSlug, "default-space-slug", "", "Slug of the space that legacy bare routes resolve to")
+
 	// Bind flags to viper
 	viper.BindPFlag("port", rootCmd.PersistentFlags().Lookup("port"))
 	viper.BindPFlag("api_key", rootCmd.PersistentFlags().Lookup("api-key"))
@@ -46,6 +49,8 @@ func init() {
 	viper.BindPFlag("telegram_token", rootCmd.PersistentFlags().Lookup("telegram-token"))
 	viper.BindPFlag("telegram_chat_id", rootCmd.PersistentFlags().Lookup("telegram-chat-id"))
 	viper.BindPFlag("telegram_chat_thread_id", rootCmd.PersistentFlags().Lookup("telegram-chat-thread-id"))
+	viper.BindPFlag("spaces_config_path", rootCmd.PersistentFlags().Lookup("spaces-config-path"))
+	viper.BindPFlag("default_space_slug", rootCmd.PersistentFlags().Lookup("default-space-slug"))
 }
 
 func initConfig() {
@@ -61,6 +66,8 @@ func initConfig() {
 	cfg.TelegramToken = viper.GetString("telegram_token")
 	cfg.TelegramChatId = viper.GetInt64("telegram_chat_id")
 	cfg.TelegramChatThreadId = viper.GetInt("telegram_chat_thread_id")
+	cfg.SpacesConfigPath = viper.GetString("spaces_config_path")
+	cfg.DefaultSpaceSlug = viper.GetString("default_space_slug")
 }
 
 func Execute() {

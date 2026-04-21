@@ -19,7 +19,7 @@ import (
 
 const (
 	pescaraKey = "pescara-key-123456"
-	bolognaKey = "bologna-key-123456"
+	aquilaKey = "aquila-key-123456"
 )
 
 func twoSpaceYAML(t *testing.T) string {
@@ -47,18 +47,18 @@ func twoSpaceYAML(t *testing.T) string {
       - name: MOCA
         description: campeggio hacker
         url: https://moca.camp
-  - slug: bologna
-    name: Metro Olografix Bologna
+  - slug: aquila
+    name: Metro Olografix L'Aquila
     address: Via Test 1
     lat: 44.494887
     lon: 11.342616
     timezone: Europe/Rome
-    logo_url: https://example.com/bologna.png
-    url: https://bologna.example
+    logo_url: https://example.com/aquila.png
+    url: https://aquila.example
     contact:
-      email: bologna@example.org
-    message: Bologna welcomes you
-    api_key: ` + bolognaKey + `
+      email: aquila@example.org
+    message: L'Aquila welcomes you
+    api_key: ` + aquilaKey + `
     telegram:
       chat_id: 0
       thread_id: 0
@@ -132,15 +132,15 @@ func TestGetStatus_PerSpace(t *testing.T) {
 	router := app.setupRouter()
 
 	pescaraID := app.spaces["pescara"].ID
-	bolognaID := app.spaces["bologna"].ID
+	aquilaID := app.spaces["aquila"].ID
 	createTestStatusFor(t, app, pescaraID, true, time.Now().UTC())
-	createTestStatusFor(t, app, bolognaID, false, time.Now().UTC())
+	createTestStatusFor(t, app, aquilaID, false, time.Now().UTC())
 
 	for _, tc := range []struct {
 		path, want string
 	}{
 		{"/s/pescara/status", "true"},
-		{"/s/bologna/status", "false"},
+		{"/s/aquila/status", "false"},
 		{"/status", "true"},
 	} {
 		w := doReq(router, "GET", tc.path, "", nil)
@@ -195,9 +195,9 @@ func TestAuth_KeysAreNotInterchangeable(t *testing.T) {
 		wantCode        int
 	}{
 		{"pescara correct", "/s/pescara/toggle", pescaraKey, http.StatusOK},
-		{"pescara wrong (bologna key)", "/s/pescara/toggle", bolognaKey, http.StatusUnauthorized},
-		{"bologna correct", "/s/bologna/toggle", bolognaKey, http.StatusOK},
-		{"bologna wrong (pescara key)", "/s/bologna/toggle", pescaraKey, http.StatusUnauthorized},
+		{"pescara wrong (aquila key)", "/s/pescara/toggle", aquilaKey, http.StatusUnauthorized},
+		{"aquila correct", "/s/aquila/toggle", aquilaKey, http.StatusOK},
+		{"aquila wrong (pescara key)", "/s/aquila/toggle", pescaraKey, http.StatusUnauthorized},
 		{"missing key", "/s/pescara/toggle", "", http.StatusUnauthorized},
 		{"legacy with default key", "/toggle", pescaraKey, http.StatusTooManyRequests}, // cooldown from earlier pescara toggle
 	} {
@@ -229,8 +229,8 @@ func TestToggleStatus_FlipsOnlyTargetSpace(t *testing.T) {
 		t.Error("pescara should be open after toggle")
 	}
 
-	if _, err := app.repo.GetLatestStatus(context.Background(), app.spaces["bologna"].ID); err == nil {
-		t.Error("bologna should have no rows after pescara-only toggle")
+	if _, err := app.repo.GetLatestStatus(context.Background(), app.spaces["aquila"].ID); err == nil {
+		t.Error("aquila should have no rows after pescara-only toggle")
 	}
 }
 
@@ -247,8 +247,8 @@ func TestToggleStatus_CooldownIsPerSpace(t *testing.T) {
 	if w := doReq(router, "POST", "/s/pescara/toggle", pescaraKey, body); w.Code != http.StatusTooManyRequests {
 		t.Errorf("second pescara toggle should 429, got %d", w.Code)
 	}
-	if w := doReq(router, "POST", "/s/bologna/toggle", bolognaKey, body); w.Code != http.StatusOK {
-		t.Errorf("bologna toggle should not be rate-limited by pescara: %d", w.Code)
+	if w := doReq(router, "POST", "/s/aquila/toggle", aquilaKey, body); w.Code != http.StatusOK {
+		t.Errorf("aquila toggle should not be rate-limited by pescara: %d", w.Code)
 	}
 }
 
@@ -303,17 +303,17 @@ func TestGetSpaceAPI_PerSpaceMetadata(t *testing.T) {
 		t.Errorf("links: %+v", resp.Links)
 	}
 
-	w2 := doReq(router, "GET", "/s/bologna/spaceapi.json", "", nil)
+	w2 := doReq(router, "GET", "/s/aquila/spaceapi.json", "", nil)
 	var resp2 SpaceAPIResponse
 	_ = json.Unmarshal(w2.Body.Bytes(), &resp2)
-	if resp2.Space != "Metro Olografix Bologna" {
-		t.Errorf("bologna space: %q", resp2.Space)
+	if resp2.Space != "Metro Olografix L'Aquila" {
+		t.Errorf("aquila space: %q", resp2.Space)
 	}
 	if resp2.State.Open {
-		t.Error("bologna should not report open (no rows)")
+		t.Error("aquila should not report open (no rows)")
 	}
 	if resp2.State.LastChange != 0 {
-		t.Errorf("bologna lastchange: %d", resp2.State.LastChange)
+		t.Errorf("aquila lastchange: %d", resp2.State.LastChange)
 	}
 }
 
@@ -322,7 +322,7 @@ func TestGetStats_EmptySpace(t *testing.T) {
 	defer cleanup()
 	router := app.setupRouter()
 
-	w := doReq(router, "GET", "/s/bologna/stats", "", nil)
+	w := doReq(router, "GET", "/s/aquila/stats", "", nil)
 	if w.Code != http.StatusOK {
 		t.Errorf("code %d", w.Code)
 	}

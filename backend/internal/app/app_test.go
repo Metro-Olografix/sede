@@ -68,13 +68,13 @@ func TestNewApp_LoadsYAMLAndSeedsDB(t *testing.T) {
     telegram:
       chat_id: 111
       thread_id: 1
-  - slug: bologna
-    name: Metro Olografix Bologna
+  - slug: aquila
+    name: Metro Olografix L'Aquila
     address: Via Test 1
     lat: 44.494887
     lon: 11.342616
     timezone: Europe/Rome
-    api_key: bologna-key-1234567890
+    api_key: aquila-key-1234567890
     telegram:
       chat_id: 222
       thread_id: 2
@@ -94,15 +94,15 @@ func TestNewApp_LoadsYAMLAndSeedsDB(t *testing.T) {
 	if app.defaultSpace == nil || app.defaultSpace.Slug != "pescara" {
 		t.Errorf("default space not pescara: %+v", app.defaultSpace)
 	}
-	bologna := app.spaces["bologna"]
-	if bologna == nil {
-		t.Fatal("bologna missing")
+	aquila := app.spaces["aquila"]
+	if aquila == nil {
+		t.Fatal("aquila missing")
 	}
-	if bologna.TelegramChatID != 222 || bologna.TelegramThread != 2 {
-		t.Errorf("bologna telegram wrong: chat=%d thread=%d", bologna.TelegramChatID, bologna.TelegramThread)
+	if aquila.TelegramChatID != 222 || aquila.TelegramThread != 2 {
+		t.Errorf("aquila telegram wrong: chat=%d thread=%d", aquila.TelegramChatID, aquila.TelegramThread)
 	}
-	if err := bcrypt.CompareHashAndPassword(bologna.APIKeyHash, []byte("bologna-key-1234567890")); err != nil {
-		t.Errorf("bologna hash mismatch: %v", err)
+	if err := bcrypt.CompareHashAndPassword(aquila.APIKeyHash, []byte("aquila-key-1234567890")); err != nil {
+		t.Errorf("aquila hash mismatch: %v", err)
 	}
 
 	spaces, err := app.repo.ListSpaces(context.Background())
@@ -198,11 +198,11 @@ func TestNewApp_RejectsEmptyYAMLWithoutLegacyEnv(t *testing.T) {
 func TestNewApp_DefaultSlugMissingFromYAML(t *testing.T) {
 	dir := t.TempDir()
 	yaml := `spaces:
-  - slug: bologna
-    name: Bologna
+  - slug: aquila
+    name: L'Aquila
     lat: 44.49
     lon: 11.34
-    api_key: bologna-key-1234567890
+    api_key: aquila-key-1234567890
 `
 	cfg := baseCfg(t, dir)
 	cfg.SpacesConfigPath = writeYAML(t, dir, yaml)

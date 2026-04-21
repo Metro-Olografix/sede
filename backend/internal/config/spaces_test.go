@@ -42,11 +42,11 @@ spaces:
       - name: MOCA
         description: hacker camp
         url: https://moca.camp
-  - slug: bologna
-    name: Metro Olografix Bologna
+  - slug: aquila
+    name: Metro Olografix L'Aquila
     lat: 44.494887
     lon: 11.342616
-    api_key: bologna-plain-key-0000
+    api_key: aquila-plain-key-0000
     telegram:
       chat_id: -100456
 `
@@ -87,8 +87,8 @@ func TestLoadSpaces_ValidYAML(t *testing.T) {
 	}
 
 	b := defs[1]
-	if b.Slug != "bologna" || b.APIKey != "bologna-plain-key-0000" || b.TelegramChatID != -100456 || b.TelegramThread != 0 {
-		t.Errorf("bologna fields wrong: %+v", b)
+	if b.Slug != "aquila" || b.APIKey != "aquila-plain-key-0000" || b.TelegramChatID != -100456 || b.TelegramThread != 0 {
+		t.Errorf("aquila fields wrong: %+v", b)
 	}
 }
 

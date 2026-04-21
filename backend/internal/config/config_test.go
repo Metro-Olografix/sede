@@ -20,7 +20,7 @@ func TestValidateAndSetDefaults(t *testing.T) {
 				AllowedOriginsStr: "https://example.com,http://localhost:3000",
 				DatabasePath:      "custom/path.db",
 				SpacesConfigPath:  "custom/spaces.yaml",
-				DefaultSpaceSlug:  "bologna",
+				DefaultSpaceSlug:  "aquila",
 			},
 			shouldPanic: false,
 			expected: Config{
@@ -31,7 +31,7 @@ func TestValidateAndSetDefaults(t *testing.T) {
 				AllowedOrigins:    []string{"https://example.com", "http://localhost:3000"},
 				DatabasePath:      "custom/path.db",
 				SpacesConfigPath:  "custom/spaces.yaml",
-				DefaultSpaceSlug:  "bologna",
+				DefaultSpaceSlug:  "aquila",
 			},
 		},
 		{

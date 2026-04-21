@@ -35,20 +35,27 @@ spaces:
         description: Metro Olografix Wikipedia page
         url: https://it.wikipedia.org/wiki/Metro_Olografix
 
-  - slug: bologna
-    name: Metro Olografix Bologna
-    address: TBD, Bologna, Italy
+  - slug: aquila
+    name: Metro Olografix L'Aquila
+    address: TBD, L'Aquila, Italy
     lat: 44.494887
     lon: 11.342616
     timezone: Europe/Rome
     logo_url: https://olografix.org/images/metro-dark.png
     url: https://olografix.org
     contact:
-      email: bologna@olografix.org
+      email: aquila@olografix.org
     message: Opening soon
-    api_key: $BOLOGNA_API_KEY
+    api_key: $AQUILA_API_KEY
     telegram:
       chat_id: -1009876543210
       thread_id: 1
-    projects: []
-    links: []
+    projects:
+      - https://github.com/Metro-Olografix
+    links:
+      - name: MOCA - Metro Olografix Camp
+        description: Il più antico campeggio hacker in Italia
+        url: https://moca.camp
+      - name: Wikipedia
+        description: Metro Olografix Wikipedia page
+        url: https://it.wikipedia.org/wiki/Metro_Olografix

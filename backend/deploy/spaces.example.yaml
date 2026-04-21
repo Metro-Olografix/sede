@@ -1,0 +1,54 @@
+# spaces.yaml — one entry per physical space served by this instance.
+#
+# Fields with $VAR references are resolved from the environment at boot;
+# a missing env var fails startup so secrets can't silently be empty.
+# Entries are upserted into the DB keyed on slug: change a field and
+# restart to roll it out. Deleting an entry leaves its DB row alone
+# (and its historical sede_statuses) — safer than implicit cascades.
+#
+# The bare legacy routes (/status, /toggle, /stats, /spaceapi.json, /ui)
+# resolve to DEFAULT_SPACE_SLUG. Point new clients at /s/<slug>/... .
+
+spaces:
+  - slug: pescara
+    name: Metro Olografix Pescara
+    address: Viale Marconi 278/1, 65126 Pescara, Italy
+    lat: 42.454657
+    lon: 14.224055
+    timezone: Europe/Rome
+    logo_url: https://olografix.org/images/metro-dark.png
+    url: https://olografix.org
+    contact:
+      email: info@olografix.org
+    message: We meet every Monday evening from 9:00 PM
+    api_key: $PESCARA_API_KEY
+    telegram:
+      chat_id: -1001234567890
+      thread_id: 1
+    projects:
+      - https://github.com/Metro-Olografix
+    links:
+      - name: MOCA - Metro Olografix Camp
+        description: Il più antico campeggio hacker in Italia
+        url: https://moca.camp
+      - name: Wikipedia
+        description: Metro Olografix Wikipedia page
+        url: https://it.wikipedia.org/wiki/Metro_Olografix
+
+  - slug: bologna
+    name: Metro Olografix Bologna
+    address: TBD, Bologna, Italy
+    lat: 44.494887
+    lon: 11.342616
+    timezone: Europe/Rome
+    logo_url: https://olografix.org/images/metro-dark.png
+    url: https://olografix.org
+    contact:
+      email: bologna@olografix.org
+    message: Opening soon
+    api_key: $BOLOGNA_API_KEY
+    telegram:
+      chat_id: -1009876543210
+      thread_id: 1
+    projects: []
+    links: []

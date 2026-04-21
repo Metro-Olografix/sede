@@ -34,12 +34,24 @@ ora, aprire [http://localhost:6052](http://localhost:6052) sul proprio browser e
 
 ### backend
 
-il backend è un semplice web server in Go, espone:
+il backend è un semplice web server in Go, multi-tenant: una sola
+istanza serve N sedi tramite prefisso di path `/s/{slug}/...`. Le rotte
+"bare" restano come alias della sede di default (`DEFAULT_SPACE_SLUG`,
+`pescara`) per compatibilità con i client già deployati (pulsante
+ESP32, MCP server).
 
- - `GET /status`: risponde `true` o `false`
- - `POST /toggle`: cambia lo stato della sede e ritorna il nuovo stato
- - `GET /stats`: ritorna le statistiche orario con probabilità di trovare la sede aperta o chiusa in base allo storico
- - `GET /ui`: attiva solo se `DEBUG=true`
+Endpoint per ciascuna sede:
+
+ - `GET /s/{slug}/status` (alias: `GET /status`): risponde `true` o `false`
+ - `POST /s/{slug}/toggle` (alias: `POST /toggle`): cambia lo stato. Richiede `X-API-KEY` della sede.
+ - `GET /s/{slug}/stats` (alias: `GET /stats`): statistiche orarie
+ - `GET /s/{slug}/spaceapi.json` (alias: `GET /spaceapi.json`): metadati SpaceAPI v15
+ - `GET /s/{slug}/ui` (alias: `GET /ui`): heatmap, attiva solo se `DEBUG=true`
+
+Le sedi sono dichiarate in `config/spaces.yaml` (vedi
+`backend/deploy/spaces.example.yaml`): slug, nome, coordinate, API key
+(supporta `$VAR`), chat/thread Telegram, metadati SpaceAPI. Il file è
+caricato al boot e fa upsert sulle righe del DB per slug.
 
 per lanciarlo in locale:
 

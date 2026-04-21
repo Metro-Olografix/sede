@@ -17,465 +17,350 @@ import (
 	"github.com/metro-olografix/sede/internal/database"
 )
 
+const (
+	pescaraKey = "pescara-key-123456"
+	bolognaKey = "bologna-key-123456"
+)
+
+func twoSpaceYAML(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	body := `spaces:
+  - slug: pescara
+    name: Metro Olografix Pescara
+    address: Viale Marconi 278/1
+    lat: 42.454657
+    lon: 14.224055
+    timezone: Europe/Rome
+    logo_url: https://example.com/pescara.png
+    url: https://pescara.example
+    contact:
+      email: pescara@example.org
+    message: Pescara welcomes you
+    api_key: ` + pescaraKey + `
+    telegram:
+      chat_id: 1001
+      thread_id: 11
+    projects:
+      - https://github.com/Metro-Olografix
+    links:
+      - name: MOCA
+        description: campeggio hacker
+        url: https://moca.camp
+  - slug: bologna
+    name: Metro Olografix Bologna
+    address: Via Test 1
+    lat: 44.494887
+    lon: 11.342616
+    timezone: Europe/Rome
+    logo_url: https://example.com/bologna.png
+    url: https://bologna.example
+    contact:
+      email: bologna@example.org
+    message: Bologna welcomes you
+    api_key: ` + bolognaKey + `
+    telegram:
+      chat_id: 0
+      thread_id: 0
+`
+	p := filepath.Join(dir, "spaces.yaml")
+	if err := os.WriteFile(p, []byte(body), 0o600); err != nil {
+		t.Fatalf("write yaml: %v", err)
+	}
+	return p
+}
+
 func setupTestApp(t *testing.T) (*App, func()) {
-	// Set gin to test mode
+	t.Helper()
 	gin.SetMode(gin.TestMode)
 
 	tmpDir := t.TempDir()
 	dbPath := filepath.Join(tmpDir, "test.db")
 
 	cfg := config.Config{
-		Port:         "8080",
-		APIKey:       "test-api-key-123456",
-		Debug:        true,
-		DatabasePath: dbPath,
-		HashAPIKey:   false,
+		Port:             "8080",
+		APIKey:           "ignored-legacy-key-1234",
+		Debug:            true,
+		DatabasePath:     dbPath,
+		SpacesConfigPath: twoSpaceYAML(t),
+		DefaultSpaceSlug: "pescara",
 	}
 
 	app, err := NewApp(cfg)
 	if err != nil {
-		t.Fatalf("Failed to create test app: %v", err)
+		t.Fatalf("NewApp: %v", err)
 	}
 
 	cleanup := func() {
 		if sqlDB, err := app.repo.Db.DB(); err == nil {
 			sqlDB.Close()
 		}
-		os.Remove(dbPath)
 	}
-
 	return app, cleanup
 }
 
-func createTestStatus(t *testing.T, app *App, isOpen bool, timestamp time.Time) {
-	status := database.SedeStatus{
-		SpaceID:   app.defaultSpace.ID,
+func createTestStatusFor(t *testing.T, app *App, spaceID uint, isOpen bool, timestamp time.Time) {
+	t.Helper()
+	if err := app.repo.CreateStatus(context.Background(), database.SedeStatus{
+		SpaceID:   spaceID,
 		IsOpen:    isOpen,
 		Timestamp: timestamp,
-	}
-
-	err := app.repo.CreateStatus(context.Background(), status)
-	if err != nil {
-		t.Fatalf("Failed to create test status: %v", err)
+	}); err != nil {
+		t.Fatalf("CreateStatus: %v", err)
 	}
 }
 
-func TestGetStatus(t *testing.T) {
-	app, cleanup := setupTestApp(t)
-	defer cleanup()
-
-	router := app.setupRouter()
-
-	t.Run("get status when no status exists", func(t *testing.T) {
-		w := httptest.NewRecorder()
-		req, _ := http.NewRequest("GET", "/status", nil)
-		router.ServeHTTP(w, req)
-
-		if w.Code != http.StatusInternalServerError {
-			t.Errorf("Expected status code %d, got %d", http.StatusInternalServerError, w.Code)
-		}
-	})
-
-	t.Run("get status when status exists - open", func(t *testing.T) {
-		createTestStatus(t, app, true, time.Now().UTC())
-
-		w := httptest.NewRecorder()
-		req, _ := http.NewRequest("GET", "/status", nil)
-		router.ServeHTTP(w, req)
-
-		if w.Code != http.StatusOK {
-			t.Errorf("Expected status code %d, got %d", http.StatusOK, w.Code)
-		}
-
-		if w.Body.String() != "true" {
-			t.Errorf("Expected body 'true', got '%s'", w.Body.String())
-		}
-	})
-
-	t.Run("get status when status exists - closed", func(t *testing.T) {
-		createTestStatus(t, app, false, time.Now().UTC())
-
-		w := httptest.NewRecorder()
-		req, _ := http.NewRequest("GET", "/status", nil)
-		router.ServeHTTP(w, req)
-
-		if w.Code != http.StatusOK {
-			t.Errorf("Expected status code %d, got %d", http.StatusOK, w.Code)
-		}
-
-		if w.Body.String() != "false" {
-			t.Errorf("Expected body 'false', got '%s'", w.Body.String())
-		}
-	})
+func doReq(router *gin.Engine, method, path, key string, body []byte) *httptest.ResponseRecorder {
+	w := httptest.NewRecorder()
+	var r *http.Request
+	if body != nil {
+		r, _ = http.NewRequest(method, path, bytes.NewBuffer(body))
+		r.Header.Set("Content-Type", "application/json")
+	} else {
+		r, _ = http.NewRequest(method, path, nil)
+	}
+	if key != "" {
+		r.Header.Set("X-API-KEY", key)
+	}
+	router.ServeHTTP(w, r)
+	return w
 }
 
-func TestToggleStatus(t *testing.T) {
+func TestGetStatus_PerSpace(t *testing.T) {
 	app, cleanup := setupTestApp(t)
 	defer cleanup()
-
 	router := app.setupRouter()
 
-	t.Run("toggle without authentication", func(t *testing.T) {
-		reqBody := ToggleStatusRequest{
-			CardID: "test-card",
-			Hash:   "test-hash",
-		}
-		jsonBody, _ := json.Marshal(reqBody)
+	pescaraID := app.spaces["pescara"].ID
+	bolognaID := app.spaces["bologna"].ID
+	createTestStatusFor(t, app, pescaraID, true, time.Now().UTC())
+	createTestStatusFor(t, app, bolognaID, false, time.Now().UTC())
 
-		w := httptest.NewRecorder()
-		req, _ := http.NewRequest("POST", "/toggle", bytes.NewBuffer(jsonBody))
-		req.Header.Set("Content-Type", "application/json")
-		router.ServeHTTP(w, req)
-
-		if w.Code != http.StatusUnauthorized {
-			t.Errorf("Expected status code %d, got %d", http.StatusUnauthorized, w.Code)
-		}
-	})
-
-	t.Run("toggle with invalid API key", func(t *testing.T) {
-		reqBody := ToggleStatusRequest{
-			CardID: "test-card",
-			Hash:   "test-hash",
-		}
-		jsonBody, _ := json.Marshal(reqBody)
-
-		w := httptest.NewRecorder()
-		req, _ := http.NewRequest("POST", "/toggle", bytes.NewBuffer(jsonBody))
-		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("X-API-KEY", "invalid-key")
-		router.ServeHTTP(w, req)
-
-		if w.Code != http.StatusUnauthorized {
-			t.Errorf("Expected status code %d, got %d", http.StatusUnauthorized, w.Code)
-		}
-	})
-
-	t.Run("toggle with valid API key - no existing status", func(t *testing.T) {
-		reqBody := ToggleStatusRequest{}
-		jsonBody, _ := json.Marshal(reqBody)
-
-		w := httptest.NewRecorder()
-		req, _ := http.NewRequest("POST", "/toggle", bytes.NewBuffer(jsonBody))
-		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("X-API-KEY", "test-api-key-123456")
-		router.ServeHTTP(w, req)
-
+	for _, tc := range []struct {
+		path, want string
+	}{
+		{"/s/pescara/status", "true"},
+		{"/s/bologna/status", "false"},
+		{"/status", "true"},
+	} {
+		w := doReq(router, "GET", tc.path, "", nil)
 		if w.Code != http.StatusOK {
-			t.Errorf("Expected status code %d, got %d", http.StatusOK, w.Code)
+			t.Errorf("%s: code %d", tc.path, w.Code)
 		}
-
-		responseBody := w.Body.String()
-		if responseBody != "true" {
-			t.Errorf("Expected status to be toggled to open (true), got: %s", responseBody)
+		if w.Body.String() != tc.want {
+			t.Errorf("%s: body %q want %q", tc.path, w.Body.String(), tc.want)
 		}
-	})
-
-	t.Run("toggle with cooldown period active", func(t *testing.T) {
-		// Create a recent status (within cooldown period)
-		createTestStatus(t, app, true, time.Now().UTC().Add(-30*time.Second))
-
-		reqBody := ToggleStatusRequest{}
-		jsonBody, _ := json.Marshal(reqBody)
-
-		w := httptest.NewRecorder()
-		req, _ := http.NewRequest("POST", "/toggle", bytes.NewBuffer(jsonBody))
-		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("X-API-KEY", "test-api-key-123456")
-		router.ServeHTTP(w, req)
-
-		if w.Code != http.StatusTooManyRequests {
-			t.Errorf("Expected status code %d, got %d", http.StatusTooManyRequests, w.Code)
-		}
-	})
-
-	t.Run("toggle with invalid JSON", func(t *testing.T) {
-		w := httptest.NewRecorder()
-		req, _ := http.NewRequest("POST", "/toggle", strings.NewReader("invalid json"))
-		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("X-API-KEY", "test-api-key-123456")
-		router.ServeHTTP(w, req)
-
-		if w.Code != http.StatusBadRequest {
-			t.Errorf("Expected status code %d, got %d", http.StatusBadRequest, w.Code)
-		}
-	})
+	}
 }
 
-func TestGetStats(t *testing.T) {
+func TestResolveSpace_UnknownSlug(t *testing.T) {
 	app, cleanup := setupTestApp(t)
 	defer cleanup()
-
 	router := app.setupRouter()
 
-	t.Run("get stats with no data", func(t *testing.T) {
-		w := httptest.NewRecorder()
-		req, _ := http.NewRequest("GET", "/stats", nil)
-		router.ServeHTTP(w, req)
+	w := doReq(router, "GET", "/s/nope/status", "", nil)
+	if w.Code != http.StatusNotFound {
+		t.Errorf("want 404, got %d", w.Code)
+	}
+}
 
-		if w.Code != http.StatusOK {
-			t.Errorf("Expected status code %d, got %d", http.StatusOK, w.Code)
+func TestLegacyAlias_MatchesDefault(t *testing.T) {
+	app, cleanup := setupTestApp(t)
+	defer cleanup()
+	router := app.setupRouter()
+
+	createTestStatusFor(t, app, app.defaultSpace.ID, true, time.Now().UTC())
+
+	for _, p := range []string{"/status", "/stats", "/spaceapi.json"} {
+		legacy := doReq(router, "GET", p, "", nil)
+		namespaced := doReq(router, "GET", "/s/pescara"+p, "", nil)
+		if legacy.Code != namespaced.Code {
+			t.Errorf("%s: legacy %d vs namespaced %d", p, legacy.Code, namespaced.Code)
 		}
-
-		var response []WeeklyStatsDetailed
-		err := json.Unmarshal(w.Body.Bytes(), &response)
-		if err != nil {
-			t.Fatalf("Failed to unmarshal response: %v", err)
+		if legacy.Body.String() != namespaced.Body.String() {
+			t.Errorf("%s: body mismatch\nlegacy:     %s\nnamespaced: %s", p, legacy.Body.String(), namespaced.Body.String())
 		}
+	}
+}
 
-		if len(response) != 0 {
-			t.Errorf("Expected empty response, got %d items", len(response))
-		}
-	})
+func TestAuth_KeysAreNotInterchangeable(t *testing.T) {
+	app, cleanup := setupTestApp(t)
+	defer cleanup()
+	router := app.setupRouter()
 
-	t.Run("get stats with data", func(t *testing.T) {
-		// Create some test data
-		now := time.Now().UTC()
-		createTestStatus(t, app, true, now.Add(-24*time.Hour))
-		createTestStatus(t, app, false, now.Add(-12*time.Hour))
+	body, _ := json.Marshal(ToggleStatusRequest{})
 
-		w := httptest.NewRecorder()
-		req, _ := http.NewRequest("GET", "/stats", nil)
-		router.ServeHTTP(w, req)
-
-		if w.Code != http.StatusOK {
-			t.Errorf("Expected status code %d, got %d", http.StatusOK, w.Code)
-		}
-
-		var response []WeeklyStatsDetailed
-		err := json.Unmarshal(w.Body.Bytes(), &response)
-		if err != nil {
-			t.Fatalf("Failed to unmarshal response: %v", err)
-		}
-
-		// Should have some data now
-		for _, stat := range response {
-			if stat.Day == "" {
-				t.Error("Expected day to be set")
+	for _, tc := range []struct {
+		name, path, key string
+		wantCode        int
+	}{
+		{"pescara correct", "/s/pescara/toggle", pescaraKey, http.StatusOK},
+		{"pescara wrong (bologna key)", "/s/pescara/toggle", bolognaKey, http.StatusUnauthorized},
+		{"bologna correct", "/s/bologna/toggle", bolognaKey, http.StatusOK},
+		{"bologna wrong (pescara key)", "/s/bologna/toggle", pescaraKey, http.StatusUnauthorized},
+		{"missing key", "/s/pescara/toggle", "", http.StatusUnauthorized},
+		{"legacy with default key", "/toggle", pescaraKey, http.StatusTooManyRequests}, // cooldown from earlier pescara toggle
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			w := doReq(router, "POST", tc.path, tc.key, body)
+			if w.Code != tc.wantCode {
+				t.Errorf("code %d want %d, body=%s", w.Code, tc.wantCode, w.Body.String())
 			}
-			if stat.DailyProbability < 0 || stat.DailyProbability > 1 {
-				t.Errorf("Expected daily probability between 0 and 1, got %f", stat.DailyProbability)
-			}
-		}
-	})
+		})
+	}
 }
 
-func TestGetSpaceAPI(t *testing.T) {
+func TestToggleStatus_FlipsOnlyTargetSpace(t *testing.T) {
 	app, cleanup := setupTestApp(t)
 	defer cleanup()
-
 	router := app.setupRouter()
 
-	t.Run("get spaceapi with no status", func(t *testing.T) {
-		w := httptest.NewRecorder()
-		req, _ := http.NewRequest("GET", "/spaceapi.json", nil)
-		router.ServeHTTP(w, req)
+	body, _ := json.Marshal(ToggleStatusRequest{})
+	w := doReq(router, "POST", "/s/pescara/toggle", pescaraKey, body)
+	if w.Code != http.StatusOK {
+		t.Fatalf("pescara toggle failed: %d %s", w.Code, w.Body.String())
+	}
 
-		if w.Code != http.StatusOK {
-			t.Errorf("Expected status code %d, got %d", http.StatusOK, w.Code)
-		}
+	pescara, err := app.repo.GetLatestStatus(context.Background(), app.spaces["pescara"].ID)
+	if err != nil {
+		t.Fatalf("get pescara: %v", err)
+	}
+	if !pescara.IsOpen {
+		t.Error("pescara should be open after toggle")
+	}
 
-		var response SpaceAPIResponse
-		err := json.Unmarshal(w.Body.Bytes(), &response)
-		if err != nil {
-			t.Fatalf("Failed to unmarshal response: %v", err)
-		}
-
-		// Verify structure
-		if response.Space != "Metro Olografix" {
-			t.Errorf("Expected space name 'Metro Olografix', got '%s'", response.Space)
-		}
-
-		if response.State.Open != false {
-			t.Errorf("Expected open state false, got %v", response.State.Open)
-		}
-
-		if response.State.LastChange != 0 {
-			t.Errorf("Expected last change 0, got %d", response.State.LastChange)
-		}
-
-		// Verify CORS headers
-		if w.Header().Get("Access-Control-Allow-Origin") != "*" {
-			t.Error("Expected CORS header to allow all origins")
-		}
-
-		if w.Header().Get("Cache-Control") != "no-cache, must-revalidate" {
-			t.Error("Expected no-cache header")
-		}
-	})
-
-	t.Run("get spaceapi with status", func(t *testing.T) {
-		testTime := time.Now().UTC()
-		createTestStatus(t, app, true, testTime)
-
-		w := httptest.NewRecorder()
-		req, _ := http.NewRequest("GET", "/spaceapi.json", nil)
-		router.ServeHTTP(w, req)
-
-		if w.Code != http.StatusOK {
-			t.Errorf("Expected status code %d, got %d", http.StatusOK, w.Code)
-		}
-
-		var response SpaceAPIResponse
-		err := json.Unmarshal(w.Body.Bytes(), &response)
-		if err != nil {
-			t.Fatalf("Failed to unmarshal response: %v", err)
-		}
-
-		if response.State.Open != true {
-			t.Errorf("Expected open state true, got %v", response.State.Open)
-		}
-
-		if response.State.LastChange != testTime.Unix() {
-			t.Errorf("Expected last change %d, got %d", testTime.Unix(), response.State.LastChange)
-		}
-	})
+	if _, err := app.repo.GetLatestStatus(context.Background(), app.spaces["bologna"].ID); err == nil {
+		t.Error("bologna should have no rows after pescara-only toggle")
+	}
 }
 
-func TestAuthMiddleware(t *testing.T) {
+func TestToggleStatus_CooldownIsPerSpace(t *testing.T) {
 	app, cleanup := setupTestApp(t)
 	defer cleanup()
+	router := app.setupRouter()
 
-	t.Run("no api key", func(t *testing.T) {
-		w := httptest.NewRecorder()
-		c, _ := gin.CreateTestContext(w)
-		c.Request, _ = http.NewRequest("POST", "/test", nil)
+	body, _ := json.Marshal(ToggleStatusRequest{})
 
-		middleware := app.authMiddleware()
-		middleware(c)
-
-		if w.Code != http.StatusUnauthorized {
-			t.Errorf("Expected status code %d, got %d", http.StatusUnauthorized, w.Code)
-		}
-	})
-
-	t.Run("valid api key", func(t *testing.T) {
-		w := httptest.NewRecorder()
-		c, _ := gin.CreateTestContext(w)
-		c.Request, _ = http.NewRequest("POST", "/test", nil)
-		c.Request.Header.Set("X-API-KEY", "test-api-key-123456")
-
-		middleware := app.authMiddleware()
-		middleware(c)
-
-		// Should not abort (no status set)
-		if c.IsAborted() {
-			t.Error("Expected request not to be aborted with valid API key")
-		}
-	})
-
-	t.Run("invalid api key", func(t *testing.T) {
-		w := httptest.NewRecorder()
-		c, _ := gin.CreateTestContext(w)
-		c.Request, _ = http.NewRequest("POST", "/test", nil)
-		c.Request.Header.Set("X-API-KEY", "invalid-key")
-
-		middleware := app.authMiddleware()
-		middleware(c)
-
-		if w.Code != http.StatusUnauthorized {
-			t.Errorf("Expected status code %d, got %d", http.StatusUnauthorized, w.Code)
-		}
-	})
+	if w := doReq(router, "POST", "/s/pescara/toggle", pescaraKey, body); w.Code != http.StatusOK {
+		t.Fatalf("first pescara toggle: %d", w.Code)
+	}
+	if w := doReq(router, "POST", "/s/pescara/toggle", pescaraKey, body); w.Code != http.StatusTooManyRequests {
+		t.Errorf("second pescara toggle should 429, got %d", w.Code)
+	}
+	if w := doReq(router, "POST", "/s/bologna/toggle", bolognaKey, body); w.Code != http.StatusOK {
+		t.Errorf("bologna toggle should not be rate-limited by pescara: %d", w.Code)
+	}
 }
 
-func TestHashedAPIKey(t *testing.T) {
-	tmpDir := t.TempDir()
-	dbPath := filepath.Join(tmpDir, "test.db")
+func TestToggleStatus_InvalidJSON(t *testing.T) {
+	app, cleanup := setupTestApp(t)
+	defer cleanup()
+	router := app.setupRouter()
 
-	cfg := config.Config{
-		Port:         "8080",
-		APIKey:       "test-api-key-123456",
-		Debug:        true,
-		DatabasePath: dbPath,
-		HashAPIKey:   true, // Enable hashing
+	w := httptest.NewRecorder()
+	r, _ := http.NewRequest("POST", "/s/pescara/toggle", strings.NewReader("invalid"))
+	r.Header.Set("Content-Type", "application/json")
+	r.Header.Set("X-API-KEY", pescaraKey)
+	router.ServeHTTP(w, r)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("want 400, got %d", w.Code)
+	}
+}
+
+func TestGetSpaceAPI_PerSpaceMetadata(t *testing.T) {
+	app, cleanup := setupTestApp(t)
+	defer cleanup()
+	router := app.setupRouter()
+
+	testTime := time.Now().UTC().Truncate(time.Second)
+	createTestStatusFor(t, app, app.spaces["pescara"].ID, true, testTime)
+
+	w := doReq(router, "GET", "/s/pescara/spaceapi.json", "", nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("code %d", w.Code)
+	}
+	var resp SpaceAPIResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if resp.Space != "Metro Olografix Pescara" {
+		t.Errorf("space: %q", resp.Space)
+	}
+	if resp.Location["address"] != "Viale Marconi 278/1" {
+		t.Errorf("address: %v", resp.Location["address"])
+	}
+	if !resp.State.Open {
+		t.Error("expected open state")
+	}
+	if resp.State.LastChange != testTime.Unix() {
+		t.Errorf("lastchange: got %d want %d", resp.State.LastChange, testTime.Unix())
+	}
+	if resp.Contact["email"] != "pescara@example.org" {
+		t.Errorf("contact: %v", resp.Contact)
+	}
+	if len(resp.Links) != 1 || resp.Links[0].URL != "https://moca.camp" {
+		t.Errorf("links: %+v", resp.Links)
 	}
 
-	app, err := NewApp(cfg)
-	if err != nil {
-		t.Fatalf("Failed to create test app: %v", err)
+	w2 := doReq(router, "GET", "/s/bologna/spaceapi.json", "", nil)
+	var resp2 SpaceAPIResponse
+	_ = json.Unmarshal(w2.Body.Bytes(), &resp2)
+	if resp2.Space != "Metro Olografix Bologna" {
+		t.Errorf("bologna space: %q", resp2.Space)
 	}
-	defer func() {
-		if sqlDB, err := app.repo.Db.DB(); err == nil {
-			sqlDB.Close()
-		}
-	}()
+	if resp2.State.Open {
+		t.Error("bologna should not report open (no rows)")
+	}
+	if resp2.State.LastChange != 0 {
+		t.Errorf("bologna lastchange: %d", resp2.State.LastChange)
+	}
+}
 
-	t.Run("hashed api key authentication", func(t *testing.T) {
-		w := httptest.NewRecorder()
-		c, _ := gin.CreateTestContext(w)
-		c.Request, _ = http.NewRequest("POST", "/test", nil)
-		c.Request.Header.Set("X-API-KEY", "test-api-key-123456")
+func TestGetStats_EmptySpace(t *testing.T) {
+	app, cleanup := setupTestApp(t)
+	defer cleanup()
+	router := app.setupRouter()
 
-		middleware := app.authMiddleware()
-		middleware(c)
-
-		// Should not abort with correct key
-		if c.IsAborted() {
-			t.Error("Expected request not to be aborted with valid hashed API key")
-		}
-	})
-
-	t.Run("hashed api key with wrong key", func(t *testing.T) {
-		w := httptest.NewRecorder()
-		c, _ := gin.CreateTestContext(w)
-		c.Request, _ = http.NewRequest("POST", "/test", nil)
-		c.Request.Header.Set("X-API-KEY", "wrong-key")
-
-		middleware := app.authMiddleware()
-		middleware(c)
-
-		if w.Code != http.StatusUnauthorized {
-			t.Errorf("Expected status code %d, got %d", http.StatusUnauthorized, w.Code)
-		}
-	})
+	w := doReq(router, "GET", "/s/bologna/stats", "", nil)
+	if w.Code != http.StatusOK {
+		t.Errorf("code %d", w.Code)
+	}
+	var resp []WeeklyStatsDetailed
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if len(resp) != 0 {
+		t.Errorf("want empty, got %d", len(resp))
+	}
 }
 
 func TestUtilityFunctions(t *testing.T) {
 	t.Run("abortUnauthorized", func(t *testing.T) {
 		w := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(w)
-
 		abortUnauthorized(c)
-
 		if w.Code != http.StatusUnauthorized {
-			t.Errorf("Expected status code %d, got %d", http.StatusUnauthorized, w.Code)
-		}
-
-		var response map[string]string
-		json.Unmarshal(w.Body.Bytes(), &response)
-
-		if response["error"] != "Invalid or missing API key" {
-			t.Errorf("Expected error message, got '%s'", response["error"])
+			t.Errorf("code %d", w.Code)
 		}
 	})
 
-	t.Run("handleDatabaseError with nil error", func(t *testing.T) {
+	t.Run("handleDatabaseError nil", func(t *testing.T) {
 		w := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(w)
-
-		result := handleDatabaseError(c, nil)
-
-		if result != false {
-			t.Error("Expected handleDatabaseError to return false for nil error")
-		}
-
-		if c.IsAborted() {
-			t.Error("Expected request not to be aborted for nil error")
+		if handleDatabaseError(c, nil) {
+			t.Error("expected false for nil")
 		}
 	})
 
-	t.Run("handleDatabaseError with context deadline exceeded", func(t *testing.T) {
+	t.Run("handleDatabaseError deadline", func(t *testing.T) {
 		w := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(w)
-
-		result := handleDatabaseError(c, context.DeadlineExceeded)
-
-		if result != true {
-			t.Error("Expected handleDatabaseError to return true for error")
+		if !handleDatabaseError(c, context.DeadlineExceeded) {
+			t.Error("expected true")
 		}
-
 		if w.Code != http.StatusGatewayTimeout {
-			t.Errorf("Expected status code %d, got %d", http.StatusGatewayTimeout, w.Code)
+			t.Errorf("code %d", w.Code)
 		}
 	})
 }

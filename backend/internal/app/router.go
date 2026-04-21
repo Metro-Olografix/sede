@@ -1,13 +1,18 @@
 package app
 
 import (
+	"errors"
 	"net/http"
 	"time"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-contrib/secure"
 	"github.com/gin-gonic/gin"
+	"github.com/metro-olografix/sede/internal/database"
+	"gorm.io/gorm"
 )
+
+const spaceContextKey = "space"
 
 func (a *App) setupRouter() *gin.Engine {
 	if !a.config.Debug {
@@ -16,7 +21,6 @@ func (a *App) setupRouter() *gin.Engine {
 
 	r := gin.New()
 
-	// CORS Configuration
 	corsConfig := cors.Config{
 		AllowMethods:     []string{"GET", "POST", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "X-API-KEY", "Authorization"},
@@ -31,7 +35,6 @@ func (a *App) setupRouter() *gin.Engine {
 		corsConfig.AllowAllOrigins = true
 	}
 
-	// Middleware chain
 	r.Use(
 		gin.Recovery(),
 		a.secureMiddleware(),
@@ -43,23 +46,78 @@ func (a *App) setupRouter() *gin.Engine {
 		r.Use(gin.Logger())
 	}
 
-	// Public routes
-	r.GET("/status", a.getStatus)
-	r.GET("/stats", a.getStats)
-	r.GET("/spaceapi.json", a.getSpaceAPI)
+	// Legacy bare routes — resolve to the default space so existing clients
+	// (ESP32 button, MCP server, deployed integrations) keep working.
+	r.GET("/status", a.resolveDefaultSpace(), a.getStatus)
+	r.GET("/stats", a.resolveDefaultSpace(), a.getStats)
+	r.GET("/spaceapi.json", a.resolveDefaultSpace(), a.getSpaceAPI)
+	r.POST("/toggle", a.resolveDefaultSpace(), a.authMiddleware(), a.toggleStatus)
 
-	// Authenticated routes
-	secured := r.Group("/")
-	secured.Use(a.authMiddleware())
+	sg := r.Group("/s/:slug", a.resolveSpaceFromPath())
 	{
-		secured.POST("/toggle", a.toggleStatus)
+		sg.GET("/status", a.getStatus)
+		sg.GET("/stats", a.getStats)
+		sg.GET("/spaceapi.json", a.getSpaceAPI)
+		sg.POST("/toggle", a.authMiddleware(), a.toggleStatus)
 	}
 
 	if a.config.Debug {
 		r.StaticFS("/ui", http.Dir("./ui"))
+		uiHandler := http.StripPrefix("/ui", http.FileServer(http.Dir("./ui")))
+		r.GET("/s/:slug/ui/*filepath", a.resolveSpaceFromPath(), func(c *gin.Context) {
+			c.Request.URL.Path = "/ui" + c.Param("filepath")
+			uiHandler.ServeHTTP(c.Writer, c.Request)
+		})
 	}
 
 	return r
+}
+
+func (a *App) resolveDefaultSpace() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if a.defaultSpace == nil {
+			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "default space not configured"})
+			return
+		}
+		c.Set(spaceContextKey, a.defaultSpace)
+		c.Next()
+	}
+}
+
+// resolveSpaceFromPath resolves :slug via the in-memory hot map; the DB is a
+// fallback only for rows that arrive after boot (future admin API). A missing
+// slug is a flat 404 — we don't distinguish typo vs. truly-absent so the
+// endpoint can't be used to enumerate configured spaces.
+func (a *App) resolveSpaceFromPath() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		slug := c.Param("slug")
+		if sp, ok := a.spaces[slug]; ok {
+			c.Set(spaceContextKey, sp)
+			c.Next()
+			return
+		}
+		sp, err := a.repo.GetSpaceBySlug(c.Request.Context(), slug)
+		if err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				c.AbortWithStatusJSON(http.StatusNotFound, gin.H{"error": "space not found"})
+				return
+			}
+			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "space lookup failed"})
+			return
+		}
+		a.spaces[sp.Slug] = sp
+		c.Set(spaceContextKey, sp)
+		c.Next()
+	}
+}
+
+func spaceFrom(c *gin.Context) *database.Space {
+	v, ok := c.Get(spaceContextKey)
+	if !ok {
+		return nil
+	}
+	sp, _ := v.(*database.Space)
+	return sp
 }
 
 func (a *App) secureMiddleware() gin.HandlerFunc {

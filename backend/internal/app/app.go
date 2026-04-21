@@ -25,7 +25,6 @@ type App struct {
 	config       config.Config
 	validate     *validator.Validate
 	limiter      *rate.Limiter
-	apiKeyHash   []byte
 	rateLimiter  *limiter.Limiter
 	telegram     *notification.Dispatcher
 	spaces       map[string]*database.Space
@@ -45,10 +44,6 @@ func NewApp(cfg config.Config) (*App, error) {
 		validate: validator.New(),
 		limiter:  rate.NewLimiter(rate.Every(rateLimitDuration/rateLimitRequests), rateLimitRequests),
 		spaces:   make(map[string]*database.Space),
-	}
-
-	if err := app.initSecurity(); err != nil {
-		return nil, err
 	}
 
 	repo, err := database.New(cfg)
@@ -155,17 +150,6 @@ func (a *App) loadAndSeedSpaces() error {
 		log.Printf("backfilled %d legacy sede_statuses rows onto space %q (id=%d)", n, ds.Slug, ds.ID)
 	}
 
-	return nil
-}
-
-func (a *App) initSecurity() error {
-	if a.config.HashAPIKey {
-		hash, err := bcrypt.GenerateFromPassword([]byte(a.config.APIKey), bcrypt.DefaultCost)
-		if err != nil {
-			return fmt.Errorf("failed to hash API key: %w", err)
-		}
-		a.apiKeyHash = hash
-	}
 	return nil
 }
 

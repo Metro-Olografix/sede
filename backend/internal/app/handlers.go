@@ -3,7 +3,6 @@ package app
 import (
 	"bytes"
 	"context"
-	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -21,9 +20,8 @@ import (
 )
 
 const (
-	apiKeyMinLength = 16
-	cooldownPeriod  = time.Minute
-	contextTimeout  = 30 * time.Second
+	cooldownPeriod = time.Minute
+	contextTimeout = 30 * time.Second
 )
 
 type StatsResponse struct {
@@ -33,7 +31,6 @@ type StatsResponse struct {
 	DailyChanges []database.DailyStats `json:"daily_changes"`
 }
 
-// Add new types for hourly breakdowns
 type HourlyStat struct {
 	Hour        string  `json:"hour"`
 	Probability float64 `json:"probability"`
@@ -45,36 +42,36 @@ type WeeklyStatsDetailed struct {
 	Hourly           []HourlyStat `json:"hourly"`
 }
 
+// authMiddleware compares X-API-KEY against the bcrypt hash stored on the
+// resolved space. Every space owns its own key so one space's secret cannot
+// unlock another's toggle endpoint.
 func (a *App) authMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		sp := spaceFrom(c)
+		if sp == nil {
+			abortUnauthorized(c)
+			return
+		}
 		apiKey := c.GetHeader("X-API-KEY")
 		if apiKey == "" {
 			abortUnauthorized(c)
 			return
 		}
-
-		if a.config.HashAPIKey {
-			if err := bcrypt.CompareHashAndPassword(a.apiKeyHash, []byte(apiKey)); err != nil {
-				logSecurityEvent("Invalid API key attempt")
-				abortUnauthorized(c)
-				return
-			}
-		} else {
-			if subtle.ConstantTimeCompare([]byte(apiKey), []byte(a.config.APIKey)) != 1 {
-				logSecurityEvent("API key mismatch")
-				abortUnauthorized(c)
-				return
-			}
+		if err := bcrypt.CompareHashAndPassword(sp.APIKeyHash, []byte(apiKey)); err != nil {
+			logSecurityEvent(fmt.Sprintf("invalid API key attempt for space %q", sp.Slug))
+			abortUnauthorized(c)
+			return
 		}
 		c.Next()
 	}
 }
 
 func (a *App) getStatus(c *gin.Context) {
+	sp := spaceFrom(c)
 	ctx, cancel := context.WithTimeout(c.Request.Context(), contextTimeout)
 	defer cancel()
 
-	status, err := a.repo.GetLatestStatus(ctx, a.defaultSpace.ID)
+	status, err := a.repo.GetLatestStatus(ctx, sp.ID)
 	if handleDatabaseError(c, err) {
 		return
 	}
@@ -88,6 +85,8 @@ type ToggleStatusRequest struct {
 }
 
 func (a *App) toggleStatus(c *gin.Context) {
+	sp := spaceFrom(c)
+
 	var req ToggleStatusRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Invalid JSON"})
@@ -97,7 +96,7 @@ func (a *App) toggleStatus(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), contextTimeout)
 	defer cancel()
 
-	currentStatus, err := a.repo.GetLatestStatus(ctx, a.defaultSpace.ID)
+	currentStatus, err := a.repo.GetLatestStatus(ctx, sp.ID)
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		handleDatabaseError(c, err)
 		return
@@ -110,7 +109,6 @@ func (a *App) toggleStatus(c *gin.Context) {
 		return
 	}
 
-	// Get card name via POST request
 	var cardName string
 	if req.CardID != "" && req.Hash != "" {
 		cardName = a.getCardName(ctx, req.CardID, req.Hash, c)
@@ -119,9 +117,8 @@ func (a *App) toggleStatus(c *gin.Context) {
 		}
 	}
 
-	// Toggle status
 	newStatus := database.SedeStatus{
-		SpaceID:   a.defaultSpace.ID,
+		SpaceID:   sp.ID,
 		IsOpen:    !currentStatus.IsOpen,
 		Timestamp: time.Now().UTC(),
 	}
@@ -131,10 +128,8 @@ func (a *App) toggleStatus(c *gin.Context) {
 		return
 	}
 
-	// Send notification
-	if a.telegram.IsInitialized() {
+	if a.telegram.IsInitialized() && sp.TelegramChatID != 0 {
 		go func() {
-			var msg string
 			emoji := "🟢"
 			action := "aperta"
 			if !newStatus.IsOpen {
@@ -142,13 +137,14 @@ func (a *App) toggleStatus(c *gin.Context) {
 				action = "chiusa"
 			}
 
+			var msg string
 			if cardName != "" {
-				msg = fmt.Sprintf("%s sede %s da %s", emoji, action, cardName)
+				msg = fmt.Sprintf("%s sede %s %s da %s", emoji, sp.Name, action, cardName)
 			} else {
-				msg = fmt.Sprintf("%s sede %s", emoji, action)
+				msg = fmt.Sprintf("%s sede %s %s", emoji, sp.Name, action)
 			}
 
-			if err := a.telegram.Send(a.config.TelegramChatId, a.config.TelegramChatThreadId, msg); err != nil {
+			if err := a.telegram.Send(sp.TelegramChatID, sp.TelegramThread, msg); err != nil {
 				log.Printf("Failed to send Telegram notification: %v", err)
 			}
 		}()
@@ -207,10 +203,11 @@ func (a *App) getCardName(ctx context.Context, cardID, hash string, c *gin.Conte
 }
 
 func (a *App) getStats(c *gin.Context) {
+	sp := spaceFrom(c)
 	ctx, cancel := context.WithTimeout(c.Request.Context(), contextTimeout)
 	defer cancel()
 
-	weeklyStats, err := a.repo.GetWeeklyStats(ctx, a.defaultSpace.ID)
+	weeklyStats, err := a.repo.GetWeeklyStats(ctx, sp.ID)
 	if handleDatabaseError(c, err) {
 		return
 	}
@@ -247,17 +244,16 @@ func handleDatabaseError(c *gin.Context, err error) bool {
 	return true
 }
 
-// Structure and handler for SpaceAPI
 type SpaceAPIResponse struct {
-	APICompatibility []string               `json:"api_compatibility"`
-	Space            string                 `json:"space"`
-	Logo             string                 `json:"logo"`
-	URL              string                 `json:"url"`
-	Location         map[string]interface{} `json:"location"`
-	State            SpaceAPIState          `json:"state"`
-	Contact          map[string]string      `json:"contact"`
-	Projects         []string               `json:"projects"`
-	Links            []map[string]string    `json:"links"`
+	APICompatibility []string          `json:"api_compatibility"`
+	Space            string            `json:"space"`
+	Logo             string            `json:"logo"`
+	URL              string            `json:"url"`
+	Location         map[string]any    `json:"location"`
+	State            SpaceAPIState     `json:"state"`
+	Contact          map[string]string `json:"contact"`
+	Projects         []string          `json:"projects"`
+	Links            []SpaceAPILink    `json:"links"`
 }
 
 type SpaceAPIState struct {
@@ -266,11 +262,18 @@ type SpaceAPIState struct {
 	LastChange int64  `json:"lastchange"`
 }
 
+type SpaceAPILink struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	URL         string `json:"url"`
+}
+
 func (a *App) getSpaceAPI(c *gin.Context) {
+	sp := spaceFrom(c)
 	ctx, cancel := context.WithTimeout(c.Request.Context(), contextTimeout)
 	defer cancel()
 
-	status, err := a.repo.GetLatestStatus(ctx, a.defaultSpace.ID)
+	status, err := a.repo.GetLatestStatus(ctx, sp.ID)
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		handleDatabaseError(c, err)
 		return
@@ -278,47 +281,48 @@ func (a *App) getSpaceAPI(c *gin.Context) {
 
 	var isOpen bool
 	var lastChange int64
-
 	if !errors.Is(err, gorm.ErrRecordNotFound) {
 		isOpen = status.IsOpen
 		lastChange = status.Timestamp.Unix()
 	}
 
-	spaceAPI := SpaceAPIResponse{
+	var projects []string
+	if sp.Projects != "" {
+		if err := json.Unmarshal([]byte(sp.Projects), &projects); err != nil {
+			log.Printf("space %q: decode projects: %v", sp.Slug, err)
+		}
+	}
+	var links []SpaceAPILink
+	if sp.Links != "" {
+		if err := json.Unmarshal([]byte(sp.Links), &links); err != nil {
+			log.Printf("space %q: decode links: %v", sp.Slug, err)
+		}
+	}
+
+	resp := SpaceAPIResponse{
 		APICompatibility: []string{"15"},
-		Space:            "Metro Olografix",
-		Logo:             "https://olografix.org/images/metro-dark.png",
-		URL:              "https://olografix.org",
-		Location: map[string]interface{}{
-			"address":  "Viale Marconi 278/1, 65126 Pescara, Italy",
-			"lat":      42.454657,
-			"lon":      14.224055,
-			"timezone": "Europe/Rome",
+		Space:            sp.Name,
+		Logo:             sp.LogoURL,
+		URL:              sp.URL,
+		Location: map[string]any{
+			"address":  sp.Address,
+			"lat":      sp.Lat,
+			"lon":      sp.Lon,
+			"timezone": sp.Timezone,
 		},
 		State: SpaceAPIState{
 			Open:       isOpen,
 			LastChange: lastChange,
-			Message:    "We meet every Monday evening from 9:00 PM",
+			Message:    sp.Message,
 		},
 		Contact: map[string]string{
-			"email": "info@olografix.org",
+			"email": sp.ContactEmail,
 		},
-		Projects: []string{"https://github.com/Metro-Olografix"},
-		Links: []map[string]string{
-			{
-				"name":        "MOCA - Metro Olografix Camp",
-				"description": "Il più antico campeggio hacker in Italia",
-				"url":         "https://moca.camp",
-			},
-			{
-				"name":        "Wikipedia",
-				"description": "Metro Olografix Wikipedia page",
-				"url":         "https://it.wikipedia.org/wiki/Metro_Olografix",
-			},
-		},
+		Projects: projects,
+		Links:    links,
 	}
 
 	c.Header("Access-Control-Allow-Origin", "*")
 	c.Header("Cache-Control", "no-cache, must-revalidate")
-	c.JSON(http.StatusOK, spaceAPI)
+	c.JSON(http.StatusOK, resp)
 }

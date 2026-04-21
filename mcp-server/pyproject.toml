@@ -5,7 +5,7 @@ description = "MCP server for Olografix Sede status"
 requires-python = ">=3.12"
 dependencies = [
     "httpx>=0.28.1",
-    "mcp>=1.12.3",
+    "mcp>=1.23.0",
 ]
 
 [project.scripts]

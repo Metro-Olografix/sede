@@ -49,7 +49,7 @@ func setupTestApp(t *testing.T) (*App, func()) {
 
 func createTestStatus(t *testing.T, app *App, isOpen bool, timestamp time.Time) {
 	status := database.SedeStatus{
-		SpaceID:   tempDefaultSpaceID,
+		SpaceID:   app.defaultSpace.ID,
 		IsOpen:    isOpen,
 		Timestamp: timestamp,
 	}

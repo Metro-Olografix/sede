@@ -24,11 +24,6 @@ const (
 	apiKeyMinLength = 16
 	cooldownPeriod  = time.Minute
 	contextTimeout  = 30 * time.Second
-
-	// TODO(commit 5): replace with a.defaultSpace.ID once app bootstrap loads
-	// the space config. Every handler is scoped per-space; until the router
-	// resolves the slug (commit 6), we operate against a single seeded row.
-	tempDefaultSpaceID = uint(1)
 )
 
 type StatsResponse struct {
@@ -79,7 +74,7 @@ func (a *App) getStatus(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), contextTimeout)
 	defer cancel()
 
-	status, err := a.repo.GetLatestStatus(ctx, tempDefaultSpaceID)
+	status, err := a.repo.GetLatestStatus(ctx, a.defaultSpace.ID)
 	if handleDatabaseError(c, err) {
 		return
 	}
@@ -102,7 +97,7 @@ func (a *App) toggleStatus(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), contextTimeout)
 	defer cancel()
 
-	currentStatus, err := a.repo.GetLatestStatus(ctx, tempDefaultSpaceID)
+	currentStatus, err := a.repo.GetLatestStatus(ctx, a.defaultSpace.ID)
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		handleDatabaseError(c, err)
 		return
@@ -126,7 +121,7 @@ func (a *App) toggleStatus(c *gin.Context) {
 
 	// Toggle status
 	newStatus := database.SedeStatus{
-		SpaceID:   tempDefaultSpaceID,
+		SpaceID:   a.defaultSpace.ID,
 		IsOpen:    !currentStatus.IsOpen,
 		Timestamp: time.Now().UTC(),
 	}
@@ -215,7 +210,7 @@ func (a *App) getStats(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), contextTimeout)
 	defer cancel()
 
-	weeklyStats, err := a.repo.GetWeeklyStats(ctx, tempDefaultSpaceID)
+	weeklyStats, err := a.repo.GetWeeklyStats(ctx, a.defaultSpace.ID)
 	if handleDatabaseError(c, err) {
 		return
 	}
@@ -275,7 +270,7 @@ func (a *App) getSpaceAPI(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), contextTimeout)
 	defer cancel()
 
-	status, err := a.repo.GetLatestStatus(ctx, tempDefaultSpaceID)
+	status, err := a.repo.GetLatestStatus(ctx, a.defaultSpace.ID)
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		handleDatabaseError(c, err)
 		return

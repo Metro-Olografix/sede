@@ -153,7 +153,7 @@ func (a *App) toggleStatus(c *gin.Context) {
 				msg = fmt.Sprintf("%s sede %s", emoji, action)
 			}
 
-			if err := a.telegram.Send(msg); err != nil {
+			if err := a.telegram.Send(a.config.TelegramChatId, a.config.TelegramChatThreadId, msg); err != nil {
 				log.Printf("Failed to send Telegram notification: %v", err)
 			}
 		}()

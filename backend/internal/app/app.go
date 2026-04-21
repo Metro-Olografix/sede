@@ -24,7 +24,7 @@ type App struct {
 	limiter     *rate.Limiter
 	apiKeyHash  []byte
 	rateLimiter *limiter.Limiter
-	telegram    *notification.Telegram
+	telegram    *notification.Dispatcher
 }
 
 const (
@@ -56,7 +56,7 @@ func NewApp(cfg config.Config) (*App, error) {
 		Limit:  rateLimitRequests,
 	})
 
-	telegram, err := notification.NewTelegram(cfg)
+	telegram, err := notification.NewDispatcher(cfg.TelegramToken)
 	if err != nil {
 		log.Printf("telegram notification not initialized: %s", err.Error())
 	}

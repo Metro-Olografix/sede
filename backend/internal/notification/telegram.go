@@ -1,52 +1,50 @@
 package notification
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/go-telegram/bot"
-	"github.com/metro-olografix/sede/internal/config"
-	"golang.org/x/net/context"
 )
 
-type Telegram struct {
-	client       *bot.Bot
-	chatId       int64
-	chatThreadId int
+// Dispatcher holds a single Telegram bot client. Each Send call specifies
+// its own chatID / threadID so the same bot can notify multiple spaces.
+type Dispatcher struct {
+	client *bot.Bot
 }
 
-func NewTelegram(cfg config.Config) (*Telegram, error) {
-	if (cfg.TelegramChatId == 0) || (cfg.TelegramToken == "") {
-		return &Telegram{}, fmt.Errorf("telegram token or chat id not set")
+// NewDispatcher builds a Dispatcher for the given bot token. An empty token
+// returns an uninitialised dispatcher whose Send is a no-op, so callers can
+// treat "no Telegram configured" as non-fatal without branching.
+func NewDispatcher(token string) (*Dispatcher, error) {
+	if token == "" {
+		return &Dispatcher{}, fmt.Errorf("telegram token not set")
 	}
 
-	b, err := bot.New(cfg.TelegramToken)
-
+	b, err := bot.New(token)
 	if err != nil {
-		return &Telegram{}, err
+		return &Dispatcher{}, err
 	}
 
-	return &Telegram{
-		client:       b,
-		chatId:       cfg.TelegramChatId,
-		chatThreadId: cfg.TelegramChatThreadId,
-	}, nil
+	return &Dispatcher{client: b}, nil
 }
 
-func (telegram *Telegram) IsInitialized() bool {
-	return telegram.client != nil
+func (d *Dispatcher) IsInitialized() bool {
+	return d != nil && d.client != nil
 }
 
-func (t *Telegram) Send(msg string) error {
-	params := &bot.SendMessageParams{
-		ChatID:          t.chatId,
+// Send posts msg to chatID / threadID. chatID == 0 is treated as "no
+// Telegram target" and returns nil — lets spaces without Telegram config
+// go through the toggle flow cleanly.
+func (d *Dispatcher) Send(chatID int64, threadID int, msg string) error {
+	if !d.IsInitialized() || chatID == 0 {
+		return nil
+	}
+
+	_, err := d.client.SendMessage(context.TODO(), &bot.SendMessageParams{
+		ChatID:          chatID,
 		Text:            msg,
-		MessageThreadID: t.chatThreadId,
-	}
-
-	_, err := t.client.SendMessage(context.TODO(), params)
-	if err != nil {
-		return err
-	}
-
-	return nil
+		MessageThreadID: threadID,
+	})
+	return err
 }

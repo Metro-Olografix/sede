@@ -217,7 +217,7 @@ func (r *Repository) GetWeeklyStats(ctx context.Context, spaceID uint) ([]Weekly
 	}
 
 	daysOrder := []string{"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"}
-	var result []WeeklyStatsDetailed
+	result := []WeeklyStatsDetailed{}
 	for _, day := range daysOrder {
 		if stat, exists := weeklyMap[day]; exists {
 			result = append(result, *stat)

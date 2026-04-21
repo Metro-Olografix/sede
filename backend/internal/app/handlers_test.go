@@ -333,6 +333,9 @@ func TestGetStats_EmptySpace(t *testing.T) {
 	if len(resp) != 0 {
 		t.Errorf("want empty, got %d", len(resp))
 	}
+	if body := strings.TrimSpace(w.Body.String()); body != "[]" {
+		t.Errorf("want JSON body []; got %q (UI breaks on null)", body)
+	}
 }
 
 func TestUtilityFunctions(t *testing.T) {

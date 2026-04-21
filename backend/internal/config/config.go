@@ -16,6 +16,16 @@ type Config struct {
 	HashAPIKey        bool
 	DatabasePath      string
 
+	// SpacesConfigPath points to the YAML file that defines all spaces served
+	// by this instance. Empty / missing file triggers the legacy-upgrade path
+	// (single space synthesised from APIKey + TelegramToken + TelegramChatId).
+	SpacesConfigPath string
+	// DefaultSpaceSlug names the space that legacy bare routes (/status,
+	// /toggle, /stats, /spaceapi.json, /ui) resolve to.
+	DefaultSpaceSlug string
+
+	// Legacy single-space Telegram target. Used only for the one-time upgrade
+	// path: when SpacesConfigPath is missing, these seed the default space.
 	TelegramToken        string
 	TelegramChatId       int64
 	TelegramChatThreadId int
@@ -34,6 +44,14 @@ func ValidateAndSetDefaults(cfg Config) Config {
 
 	if cfg.DatabasePath == "" {
 		cfg.DatabasePath = "database/sede.db"
+	}
+
+	if cfg.SpacesConfigPath == "" {
+		cfg.SpacesConfigPath = "config/spaces.yaml"
+	}
+
+	if cfg.DefaultSpaceSlug == "" {
+		cfg.DefaultSpaceSlug = "pescara"
 	}
 
 	return cfg

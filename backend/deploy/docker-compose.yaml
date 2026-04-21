@@ -7,6 +7,7 @@ services:
     pull_policy: always
     volumes:
       - ./database:/app/database
+      - ./config:/app/config:ro
     networks:
       - "internal-apps"
     env_file: backend.env

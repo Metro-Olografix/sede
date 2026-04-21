@@ -3,3 +3,6 @@ backend/database/
 **/*.env.unenc
 # age encryption key
 backend/deploy/*-key.txt
+# real spaces config (keep only the example in the repo)
+backend/deploy/config/spaces.yaml
+backend/config/spaces.yaml

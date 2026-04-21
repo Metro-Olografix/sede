@@ -77,9 +77,14 @@
     </div>
 
     <script>
+        function basePath() {
+            const m = window.location.pathname.match(/^\/s\/([^/]+)\/ui/);
+            return m ? `/s/${m[1]}` : '';
+        }
+
         async function loadTable() {
             try {
-                const response = await fetch('/stats');
+                const response = await fetch(`${basePath()}/stats`);
                 const data = await response.json();
                 
                 const table = document.getElementById('breakdown-table');

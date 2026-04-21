@@ -1,0 +1,20 @@
+services:
+  sede:
+    build: .
+    restart: "no"
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./database:/app/database
+      - ./ui:/app/ui:ro
+      - ./deploy/spaces.example.yaml:/app/config/spaces.yaml:ro
+    environment:
+      PORT: "8080"
+      DEBUG: "true"
+      DATABASE_PATH: database/sede.db
+      SPACES_CONFIG_PATH: config/spaces.yaml
+      DEFAULT_SPACE_SLUG: pescara
+      # Keys referenced by $VAR in spaces.example.yaml
+      PESCARA_API_KEY: pescara-key-1234567890
+      AQUILA_API_KEY: aquila-key-1234567890
+      API_KEY: legacy-test-key-1234

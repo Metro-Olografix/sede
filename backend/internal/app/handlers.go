@@ -139,9 +139,9 @@ func (a *App) toggleStatus(c *gin.Context) {
 
 			var msg string
 			if cardName != "" {
-				msg = fmt.Sprintf("%s sede %s %s da %s", emoji, sp.Name, action, cardName)
+				msg = fmt.Sprintf("%s sede %s da %s", emoji, action, cardName)
 			} else {
-				msg = fmt.Sprintf("%s sede %s %s", emoji, sp.Name, action)
+				msg = fmt.Sprintf("%s sede %s", emoji, action)
 			}
 
 			if err := a.telegram.Send(sp.TelegramChatID, sp.TelegramThread, msg); err != nil {

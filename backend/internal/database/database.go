@@ -52,10 +52,16 @@ type Space struct {
 // SpaceID exists solely so that adding the column via SQLite ALTER TABLE on
 // an existing single-space DB succeeds; new rows always set SpaceID
 // explicitly, and boot-time backfill rewrites any legacy zeros.
+//
+// Reason is an optional tag explaining a non-standard closure (e.g. "gelatino"
+// when the sede is closed because everyone went for ice cream). Empty on
+// normal toggles. Stored as a plain string column to keep the schema simple
+// and the ESP32 client free to send arbitrary reasons over the wire.
 type SedeStatus struct {
 	ID        uint      `gorm:"primarykey"`
 	SpaceID   uint      `gorm:"not null;default:0;index:idx_space_timestamp,priority:1"`
 	IsOpen    bool      `gorm:"not null"`
+	Reason    string    `gorm:"default:''"`
 	Timestamp time.Time `gorm:"not null;index:idx_space_timestamp,priority:2"`
 }
 

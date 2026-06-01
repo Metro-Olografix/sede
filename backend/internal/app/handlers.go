@@ -82,7 +82,15 @@ func (a *App) getStatus(c *gin.Context) {
 type ToggleStatusRequest struct {
 	CardID string `json:"cardId"`
 	Hash   string `json:"hash"`
+	// Reason marks a non-standard close. When set to "gelatino" the toggle
+	// becomes an idempotent close ("chiusa per gelatino") instead of flipping
+	// the previous state. Empty for a regular toggle.
+	Reason string `json:"reason,omitempty"`
 }
+
+// reasonGelatino is the canonical tag for the "chiusa per gelatino" closure,
+// triggered by a fast double-click on the physical button.
+const reasonGelatino = "gelatino"
 
 func (a *App) toggleStatus(c *gin.Context) {
 	sp := spaceFrom(c)
@@ -117,9 +125,17 @@ func (a *App) toggleStatus(c *gin.Context) {
 		}
 	}
 
+	// "gelatino" is a forced close, not a flip: a double-click should always
+	// land in the closed state regardless of the previous one.
+	newIsOpen := !currentStatus.IsOpen
+	if req.Reason == reasonGelatino {
+		newIsOpen = false
+	}
+
 	newStatus := database.SedeStatus{
 		SpaceID:   sp.ID,
-		IsOpen:    !currentStatus.IsOpen,
+		IsOpen:    newIsOpen,
+		Reason:    req.Reason,
 		Timestamp: time.Now().UTC(),
 	}
 
@@ -135,6 +151,10 @@ func (a *App) toggleStatus(c *gin.Context) {
 			if !newStatus.IsOpen {
 				emoji = "🔴"
 				action = "chiusa"
+			}
+			if newStatus.Reason == reasonGelatino {
+				emoji = "🍦"
+				action = "chiusa per gelatino"
 			}
 
 			var msg string
@@ -281,9 +301,19 @@ func (a *App) getSpaceAPI(c *gin.Context) {
 
 	var isOpen bool
 	var lastChange int64
+	var reason string
 	if !errors.Is(err, gorm.ErrRecordNotFound) {
 		isOpen = status.IsOpen
 		lastChange = status.Timestamp.Unix()
+		reason = status.Reason
+	}
+
+	// When the latest event is a gelatino closure, surface it in the SpaceAPI
+	// message field so any external consumer (websites, dashboards) sees the
+	// reason rather than just "closed".
+	message := sp.Message
+	if !isOpen && reason == reasonGelatino {
+		message = "Chiusa per gelatino 🍦"
 	}
 
 	var projects []string
@@ -313,7 +343,7 @@ func (a *App) getSpaceAPI(c *gin.Context) {
 		State: SpaceAPIState{
 			Open:       isOpen,
 			LastChange: lastChange,
-			Message:    sp.Message,
+			Message:    message,
 		},
 		Contact: map[string]string{
 			"email": sp.ContactEmail,
